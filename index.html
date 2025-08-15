@@ -343,11 +343,35 @@ function renderCart(){
 
 /* ===== 取餐時段／下單 ===== */
 function populateEarliestTimeOptions(){
-  const dateStr=todayIsoDate(), sel=el("#earliestTime");
-  for(const s of generateSlotsForDate(dateStr)){
-    const label=slotKey(s), opt=document.createElement("option");
-    opt.value=label; opt.textContent=label; sel.appendChild(opt);
+  const sel=el("#earliestTime");
+  const dateStr=todayIsoDate();
+
+  // 重建選單（先放回預設不指定）
+  sel.innerHTML = '<option value="">不指定（系統自動安排）</option>';
+
+  let slots = [];
+  try { slots = generateSlotsForDate(dateStr); } catch(_){ slots = []; }
+
+  if (Array.isArray(slots) && slots.length) {
+    for (const s of slots) {
+      const label = slotKey(s);
+      const opt=document.createElement("option");
+      opt.value=label; opt.textContent=label;
+      sel.appendChild(opt);
+    }
+  } else {
+    // 後援：不用任何外掛，純手動把 16:30~20:30 每 15 分鐘塞進去
+    let h = STORE.openHour, m = STORE.openMinute;
+    while (h < STORE.closeHour || (h === STORE.closeHour && m < STORE.closeMinute)) {
+      const label = `${pad2(h)}:${pad2(m)}`;
+      const opt=document.createElement("option");
+      opt.value=label; opt.textContent=label;
+      sel.appendChild(opt);
+      m += STORE.slotMinutes;
+      while (m >= 60) { h += 1; m -= 60; }
+    }
   }
+  sel.disabled = false; // 確保可選
 }
 
 async function onSubmitOrder(e){
