@@ -14,7 +14,7 @@
     .container-slim{max-width:1200px}
   </style>
 
-  <!-- Day.js + TZ（加入 customParseFormat，避免 invalid time zone 類錯誤） -->
+  <!-- Day.js + TZ（帶 customParseFormat，雖然本頁幾乎不解析字串，但保險） -->
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
@@ -86,6 +86,24 @@
   <section id="slotList" class="space-y-4"></section>
 </main>
 
+<!-- Debug Panel：網址加 ?debug=1 會顯示 -->
+<div id="dbg" style="display:none" class="mx-auto container-slim px-4 pb-8">
+  <div class="card bg-white p-4 border border-slate-200">
+    <div class="flex items-center justify-between">
+      <div class="font-semibold">Debug Panel</div>
+      <button id="dbgCopy" class="btn px-3 py-1 border border-slate-300 hover:bg-slate-100">複製</button>
+    </div>
+    <div class="text-xs text-slate-600 mt-2 grid gap-1">
+      <div>Last URL: <span id="dbgUrl" class="break-all"></span></div>
+      <div>Last OK: <span id="dbgOk"></span></div>
+      <div>Last Error: <span id="dbgErr" class="text-red-600"></span></div>
+      <div>Last Date: <span id="dbgDate"></span></div>
+      <div>Grouped: <span id="dbgGrouped" class="break-all"></span></div>
+    </div>
+    <textarea id="dbgRaw" class="w-full h-40 mt-3 text-xs border border-slate-300 rounded-lg p-2 font-mono"></textarea>
+  </div>
+</div>
+
 <!-- 密碼門檻 -->
 <div id="authGate" class="fixed inset-0 z-40 bg-white/95 backdrop-blur grid place-items-center">
   <div class="card bg-white p-6 w-[92%] max-w-sm border border-slate-200">
@@ -106,18 +124,26 @@ const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxvRLFEEufoN3dIwyBeTZp
 const API_KEY  = '326hotpot326';
 
 // 簡易密碼（自行修改）。也可用網址 ?pass=xxxxx 直接帶入
-const OWNER_PASS = '326';
+const OWNER_PASS = '326boss';
 
 // 營運設定（僅供容量顯示）
 const STORE = { slotCapacity: 7 };
+
+/* ===== Debug 開關（網址帶 ?debug=1 啟用） ===== */
+const DEBUG = /[?&]debug=1/.test(location.search);
+const dlog = (...a) => { if (DEBUG) console.log('[owner]', ...a); };
 
 /* ===== 小工具 ===== */
 const el = s => document.querySelector(s);
 function pad2(n){ return String(n).padStart(2,'0'); }
 function formatCurrency(n){ return '$' + Number(n||0).toLocaleString('zh-Hant'); }
-function todayYMD(){ return dayjs().tz().format('YYYY-MM-DD'); }
-// 注意：這裡只格式化，不做自訂解析，所以不會觸發 invalid time zone 問題
-function slotKey(iso){ return dayjs(iso).tz().format('HH:mm'); }
+function todayYMD(){
+  return dayjs().tz().format('YYYY-MM-DD');
+}
+function slotKey(iso){
+  // 只格式化，不解析字串，避免 invalid time zone
+  return dayjs(iso).tz().format('HH:mm');
+}
 
 /* ===== 可靠的 fetch 包裝 ===== */
 async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
@@ -144,17 +170,71 @@ async function apiList(dateStr){
   url.searchParams.set('action','list');
   if (dateStr) url.searchParams.set('date', dateStr);
   url.searchParams.set('key', API_KEY);
+  dlog('apiList →', url.toString());
   const data = await fetchJson(url.toString());
+  dlog('apiList response ←', data);
   if (!data.ok) throw new Error(data.error || 'list_failed');
+  updateDebugPanel({
+    lastUrl: url.toString(),
+    lastOk: data.ok,
+    lastError: data.error || '',
+    count: (data.orders||[]).length,
+    raw: JSON.stringify(data, null, 2)
+  });
   return data.orders || [];
 }
+
 async function apiDelete(id){
+  dlog('apiDelete →', id);
   const data = await fetchJson(ENDPOINT, {
     method: 'POST',
     body: JSON.stringify({ apiKey: API_KEY, action: 'delete', id })
   }, 15000);
+  dlog('apiDelete response ←', data);
   if (!data.ok) throw new Error(data.error || 'delete_failed');
+  updateDebugPanel({
+    lastUrl: ENDPOINT + ' (POST delete)',
+    lastOk: data.ok,
+    lastError: data.error || '',
+    count: undefined,
+    raw: JSON.stringify(data, null, 2)
+  });
   return data;
+}
+
+/* ===== 資料清洗（避免壞資料造成渲染失敗） ===== */
+function sanitizeOrders(list){
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const o of list) {
+    try {
+      const id = String(o?.id || '');
+      const assignedISO = (() => {
+        const raw = o?.assignedSlot || o?.createdAt || '';
+        const d = new Date(raw);
+        return isNaN(d) ? '' : d.toISOString();
+      })();
+      if (!assignedISO) continue; // 沒有效時段就略過
+
+      out.push({
+        id,
+        assignedSlot: assignedISO,
+        capacityUnits: Number(o?.capacityUnits || 0),
+        customer: {
+          name: String(o?.customer?.name || ''),
+          phone: String(o?.customer?.phone || '')
+        },
+        items: Array.isArray(o?.items) ? o.items : [],
+        subtotal: Number(o?.subtotal || 0),
+        discount: Number(o?.discount || 0),
+        total: Number(o?.total || 0),
+        createdAt: o?.createdAt || assignedISO,
+      });
+    } catch (e) {
+      console.warn('sanitizeOrders: skip bad row', o, e);
+    }
+  }
+  return out;
 }
 
 /* ===== 渲染 ===== */
@@ -167,93 +247,92 @@ function renderSummary(orders){
   el('#sumRevenue').textContent = formatCurrency(sumRevenue);
 }
 
-function renderOrders(orders){
-  // 依時段分組（以 assignedSlot 的 HH:mm）
-  const groups = {};
-  for (const o of orders) {
-    const k = slotKey(o.assignedSlot || o.createdAt || new Date().toISOString());
-    if (!groups[k]) groups[k] = [];
-    groups[k].push(o);
-  }
-  const slots = Object.keys(groups).sort((a,b)=> a.localeCompare(b));
+function renderOrders(ordersRaw){
+  try{
+    const orders = sanitizeOrders(ordersRaw);
 
-  const root = el('#slotList');
-  root.innerHTML = '';
+    // 依時段分組（assignedSlot -> HH:mm）
+    const groups = {};
+    for (const o of orders) {
+      const hhmm = slotKey(o.assignedSlot);
+      (groups[hhmm] ||= []).push(o);
+    }
+    const slots = Object.keys(groups).sort((a,b)=> a.localeCompare(b));
+    const root = el('#slotList');
+    root.innerHTML = '';
 
-  if (slots.length === 0) {
-    root.innerHTML = '<div class="card bg-white p-6 text-slate-600">本日尚無訂單。</div>';
-    renderSummary([]);
-    return;
-  }
-
-  const frag = document.createDocumentFragment();
-  for (const hhmm of slots) {
-    const arr = groups[hhmm].sort((a,b)=> (a.createdAt||'').localeCompare(b.createdAt||''));
-    const used = arr.reduce((s,o)=> s + Number(o.capacityUnits||0), 0);
-    const pct = Math.max(0, Math.min(100, Math.round(used / STORE.slotCapacity * 100)));
-
-    const sec = document.createElement('section');
-    sec.className = 'card bg-white p-4';
-    sec.innerHTML = `
-      <div class="flex items-center justify-between">
-        <div class="text-lg font-semibold">${hhmm}</div>
-        <div class="text-sm text-slate-600">容量 ${used} / ${STORE.slotCapacity}</div>
-      </div>
-      <div class="w-full h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
-        <div class="h-2 bg-slate-900" style="width:${pct}%"></div>
-      </div>
-      <div class="mt-4 divide-y divide-slate-200" id="list-${hhmm}"></div>
-    `;
-    const list = sec.querySelector(`#list-${hhmm}`);
-
-    for (const o of arr) {
-      const itemsText = (Array.isArray(o.items)?o.items:[])
-        .map(it => `${it.name}×${it.qty}`).join('、') || '(無品項)';
-      const row = document.createElement('div');
-      row.className = 'py-3 flex items-start justify-between gap-4';
-      row.innerHTML = `
-        <div class="min-w-0">
-          <div class="font-medium">
-            <span class="inline-block min-w-[4.5rem]">#${o.id?.slice(-6) || ''}</span>
-            <span class="ml-2">${o.customer?.name || ''}</span>
-            <a class="ml-2 text-slate-600 underline" href="tel:${o.customer?.phone || ''}">${o.customer?.phone || ''}</a>
-            <span class="ml-2 text-xs text-slate-500">${dayjs(o.createdAt).tz().format('HH:mm:ss')} 建立</span>
-          </div>
-          <div class="text-sm text-slate-700 mt-1">${itemsText}</div>
-          <div class="text-xs text-slate-500">等效數：${Number(o.capacityUnits||0)} ・ 小計：${formatCurrency(o.subtotal||0)} ・ 折扣：${formatCurrency(o.discount||0)} ・ 合計：<span class="mono">${formatCurrency(o.total||0)}</span></div>
-        </div>
-        <div class="shrink-0 flex items-center gap-2">
-          <button data-id="${o.id}" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100 btn-delete">刪除</button>
-        </div>
-      `;
-      list.appendChild(row);
+    if (slots.length === 0) {
+      root.innerHTML = '<div class="card bg-white p-6 text-slate-600">本日尚無訂單。</div>';
+      renderSummary([]);
+      return;
     }
 
-    frag.appendChild(sec);
-  }
-  root.appendChild(frag);
+    const frag = document.createDocumentFragment();
+    for (const hhmm of slots) {
+      const arr = groups[hhmm].sort((a,b)=> (a.createdAt||'').localeCompare(b.createdAt||''));
+      const used = arr.reduce((s,o)=> s + Number(o.capacityUnits||0), 0);
+      const pct = Math.max(0, Math.min(100, Math.round(used / STORE.slotCapacity * 100)));
 
-  // 綁定刪除事件
-  root.querySelectorAll('.btn-delete').forEach(btn=>{
-    btn.addEventListener('click', async (e)=>{
-      const id = e.currentTarget.getAttribute('data-id');
-      if (!id) return;
-      if (!confirm(`確定刪除訂單 ${id}？`)) return;
-      e.currentTarget.disabled = true;
-      try {
-        await apiDelete(id);
-        await refreshOrders();
-      } catch (err) {
-        console.error('delete_failed', err);
-        alert('刪除失敗，請稍後再試');
-      } finally {
-        e.currentTarget.disabled = false;
+      const sec = document.createElement('section');
+      sec.className = 'card bg-white p-4';
+      sec.innerHTML = `
+        <div class="flex items-center justify-between">
+          <div class="text-lg font-semibold">${hhmm}</div>
+          <div class="text-sm text-slate-600">容量 ${used} / ${STORE.slotCapacity}</div>
+        </div>
+        <div class="w-full h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
+          <div class="h-2 bg-slate-900" style="width:${pct}%"></div>
+        </div>
+        <div class="mt-4 divide-y divide-slate-200" id="list-${hhmm}"></div>
+      `;
+      const list = sec.querySelector(`#list-${hhmm}`);
+
+      for (const o of arr) {
+        const itemsText = (Array.isArray(o.items)?o.items:[])
+          .map(it => `${it.name}×${it.qty}`).join('、') || '(無品項)';
+        const row = document.createElement('div');
+        row.className = 'py-3 flex items-start justify-between gap-4';
+        row.innerHTML = `
+          <div class="min-w-0">
+            <div class="font-medium">
+              <span class="inline-block min-w-[4.5rem]">#${(o.id||'').slice(-6)}</span>
+              <span class="ml-2">${o.customer?.name || ''}</span>
+              <a class="ml-2 text-slate-600 underline" href="tel:${o.customer?.phone || ''}">${o.customer?.phone || ''}</a>
+              <span class="ml-2 text-xs text-slate-500">${dayjs(o.createdAt).tz().format('HH:mm:ss')} 建立</span>
+            </div>
+            <div class="text-sm text-slate-700 mt-1">${itemsText}</div>
+            <div class="text-xs text-slate-500">等效數：${Number(o.capacityUnits||0)} ・ 小計：${formatCurrency(o.subtotal||0)} ・ 折扣：${formatCurrency(o.discount||0)} ・ 合計：<span class="mono">${formatCurrency(o.total||0)}</span></div>
+          </div>
+          <div class="shrink-0 flex items-center gap-2">
+            <button data-id="${o.id}" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100 btn-delete">刪除</button>
+          </div>
+        `;
+        list.appendChild(row);
       }
-    });
-  });
 
-  // 彙總
-  renderSummary(orders);
+      frag.appendChild(sec);
+    }
+    root.appendChild(frag);
+
+    // 刪除事件
+    root.querySelectorAll('.btn-delete').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        const id = e.currentTarget.getAttribute('data-id');
+        if (!id) return;
+        if (!confirm(`確定刪除訂單 ${id}？`)) return;
+        e.currentTarget.disabled = true;
+        try { await apiDelete(id); await refreshOrders(); }
+        catch (err) { console.error('delete_failed', err); alert('刪除失敗，請稍後再試'); }
+        finally { e.currentTarget.disabled = false; }
+      });
+    });
+
+    renderSummary(orders);
+  }catch(err){
+    console.error('renderOrders_error', err);
+    const root = el('#slotList');
+    root.innerHTML = `<div class="card bg-white p-6 text-red-600">渲染失敗：${String(err && err.message || err)}</div>`;
+  }
 }
 
 /* ===== 輪詢與控制 ===== */
@@ -262,22 +341,57 @@ async function refreshOrders(){
   if (polling) return;
   polling = true;
   const dateStr = el('#dateInput').value || todayYMD();
+  dlog('refreshOrders date →', dateStr);
   try {
-    const orders = await apiList(dateStr);
-    renderOrders(orders);
+    const orders = await apiList(dateStr);       // 抓資料
+    dlog('orders len:', orders.length);
+    renderOrders(orders);                         // 渲染
     el('#lastSync').textContent = dayjs().tz().format('YYYY-MM-DD HH:mm:ss');
+    updateDebugPanel({ lastDate: dateStr, grouped: groupBySlot(orders) });
   } catch (e) {
-    console.error('refresh failed', e);
+    console.error('refresh failed (fetch stage)', e);
+    updateDebugPanel({ lastError: String(e && e.message || e) });
     const root = el('#slotList');
-    if (root.innerHTML.trim() === '') {
-      root.innerHTML = `<div class="card bg-white p-6 text-red-600">讀取失敗，請點「刷新」重試。</div>`;
-    }
+    root.innerHTML = `<div class="card bg-white p-6 text-red-600">
+      讀取失敗，請點「刷新」重試。<br><span class="text-xs">${String(e && e.message || e)}</span>
+    </div>`;
   } finally {
     polling = false;
   }
 }
 function startAuto(){ if (timer) clearInterval(timer); timer = setInterval(refreshOrders, 15000); }
 function stopAuto(){ if (timer) { clearInterval(timer); timer = null; } }
+
+/* ===== 依時段分組（供 Debug 用） ===== */
+function groupBySlot(orders){
+  const g={};
+  for(const o of (orders||[])){
+    const k = o?.assignedSlot ? dayjs(o.assignedSlot).tz().format('HH:mm') : '—';
+    (g[k] ||= []).push(o.id);
+  }
+  return g;
+}
+
+/* ===== Debug Panel 邏輯 ===== */
+function updateDebugPanel(patch){
+  if (!DEBUG) return;
+  const root = document.getElementById('dbg');
+  if (root && root.style.display !== 'block') root.style.display = 'block';
+  if (patch.lastUrl   !== undefined) document.getElementById('dbgUrl').textContent = patch.lastUrl || '';
+  if (patch.lastOk    !== undefined) document.getElementById('dbgOk').textContent  = String(patch.lastOk);
+  if (patch.lastError !== undefined) document.getElementById('dbgErr').textContent = patch.lastError || '';
+  if (patch.lastDate  !== undefined) document.getElementById('dbgDate').textContent = patch.lastDate || '';
+  if (patch.grouped   !== undefined) document.getElementById('dbgGrouped').textContent = JSON.stringify(patch.grouped || {}, null, 0);
+  if (patch.raw       !== undefined) document.getElementById('dbgRaw').value = patch.raw || '';
+}
+document.addEventListener('DOMContentLoaded', ()=>{
+  if (DEBUG){
+    document.getElementById('dbgCopy')?.addEventListener('click', ()=>{
+      const txt = document.getElementById('dbgRaw').value;
+      navigator.clipboard?.writeText(txt);
+    });
+  }
+});
 
 /* ===== 簡易密碼門檻 ===== */
 function checkPass(input){
