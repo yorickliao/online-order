@@ -18,18 +18,16 @@
       <div class="w-10 h-10 bg-slate-900 text-white rounded-xl grid place-items-center text-lg font-bold select-none">店</div>
       <div>
         <div class="text-xl font-semibold">326臭臭鍋 線上點餐</div>
-        <div class="text-xs text-slate-500">營業時間 16:30–20:30 ・ 地址:台南市安南區安通路四段119巷30弄2號</div>
+        <div class="text-xs text-slate-500">營業時間 16:30–20:30 ・ 每 15 分鐘上限 7 鍋</div>
       </div>
     </div>
     <div class="flex items-center gap-2">
-      <!-- 客人版不顯示老闆入口 -->
       <a href="#cart" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">購物車</a>
     </div>
   </div>
 </header>
 
 <main class="mx-auto container-slim px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-  <!-- 商品區 -->
   <section class="lg:col-span-2 space-y-6">
     <div class="card bg-white p-4">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -40,16 +38,13 @@
         </div>
         <div>
           <label class="text-sm text-slate-600">標籤</label>
-          <select id="tagSelect" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900">
-            <option value="">全部</option>
-          </select>
+          <select id="tagSelect" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"><option value="">全部</option></select>
         </div>
       </div>
     </div>
     <div id="menuList" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
   </section>
 
-  <!-- 購物車與結帳 -->
   <aside id="cart" class="space-y-6">
     <div class="card bg-white p-5 sticky top-[88px]">
       <h2 class="text-lg font-semibold mb-4">購物車</h2>
@@ -86,7 +81,7 @@
           <select id="earliestTime" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2">
             <option value="">不指定（系統自動安排）</option>
           </select>
-          <p class="text-xs text-slate-500 mt-1">未選時，系統會從「現在時間 + 準備緩衝」開始排。</p>
+          <p class="text-xs text-slate-500 mt-1">未選時，系統會從「現在 + 準備緩衝」開始排。</p>
         </div>
         <div class="bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm">
           每 15 分鐘一個時段；每時段上限 7 鍋（火鍋等效單位）
@@ -98,14 +93,12 @@
   </aside>
 </main>
 
-<!-- 成功彈窗 -->
 <div id="successModal" class="fixed inset-0 z-40 hidden">
   <div class="absolute inset-0 bg-black/40"></div>
   <div class="relative z-10 mx-auto mt-24 w-[92%] max-w-xl card bg-white p-6">
     <h3 class="text-xl font-semibold mb-2">下單成功</h3>
     <p class="text-slate-700">您的取餐時段為：</p>
     <p id="assignedSlotText" class="text-2xl font-bold mt-1"></p>
-    <p class="text-slate-600 mt-2">此訂單暫存於本機瀏覽器（示範）。</p>
     <div class="mt-4 flex justify-end">
       <button id="closeSuccess" class="btn px-4 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
     </div>
@@ -122,6 +115,10 @@
 </footer>
 
 <script>
+/* ===== API 端點與 Key（部署後必填） ===== */
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbze9Zp_vmiZTwF_o-3WO6lY-oqo5aKGrc2Ow58s4DZOhXmHQwDptXvNoACdHTb9LMP3eA/exec'; // ← 換成你的 Web App URL
+const API_KEY  = '326hotpot326'; // ← 與後端一致
+
 /* ===== 設定 ===== */
 const STORE = {
   name: "326臭臭鍋",
@@ -134,25 +131,19 @@ const STORE = {
   discountAmount: 100,
 };
 
-/* ===== 菜單 =====
-   鍋物（等效 1）＋辣度選擇（泡菜鍋無「無辣」）
-   主食、單點（等效 0）
-*/
+/* ===== 菜單（含辣度） ===== */
 const SPICE = ["無辣","小辣","中辣","大辣"];
 const MENU = [
-  // 鍋物
-  { id:"臭臭鍋", name:"臭臭鍋", price:100, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
-  { id:"鴨血鍋", name:"鴨血鍋", price:90, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
-  { id:"泡菜鍋", name:"泡菜鍋", price:110, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE.filter(s=>s!=="無辣") },
-  { id:"什錦鍋", name:"什錦鍋", price:130, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
-  { id:"腸旺鍋", name:"腸旺鍋", price:130, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
-  { id:"牛雜鍋", name:"牛雜鍋", price:150, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
-  { id:"大腸鴨血鍋", name:"大腸鴨血鍋", price:140, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
-  // 主食
-  { id:"白飯", name:"白飯", price:10, desc:"", tags:["主食"], capacityUnits:0 },
-  { id:"冬粉", name:"冬粉", price:10, desc:"", tags:["主食"], capacityUnits:0 },
-  { id:"科學麵", name:"科學麵", price:15, desc:"", tags:["主食"], capacityUnits:0 },
-  // 單點
+  { id:"臭臭鍋", name:"臭臭鍋", price:100, tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"鴨血鍋", name:"鴨血鍋", price:90, tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"泡菜鍋", name:"泡菜鍋", price:110, tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE.filter(s=>s!=="無辣") },
+  { id:"什錦鍋", name:"什錦鍋", price:130, tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"腸旺鍋", name:"腸旺鍋", price:130, tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"牛雜鍋", name:"牛雜鍋", price:150, tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"大腸鴨血鍋", name:"大腸鴨血鍋", price:140, tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"白飯", name:"白飯", price:10, tags:["主食"], capacityUnits:0 },
+  { id:"冬粉", name:"冬粉", price:10, tags:["主食"], capacityUnits:0 },
+  { id:"科學麵", name:"科學麵", price:15, tags:["主食"], capacityUnits:0 },
   { id:"蟹肉棒", name:"蟹肉棒", price:20, tags:["單點"], capacityUnits:0 },
   { id:"鱈魚丸", name:"鱈魚丸", price:20, tags:["單點"], capacityUnits:0 },
   { id:"北海翅", name:"北海翅", price:20, tags:["單點"], capacityUnits:0 },
@@ -173,10 +164,7 @@ const MENU = [
 
 /* ===== 狀態 & 工具 ===== */
 const el = s => document.querySelector(s);
-const state = { cart:{}, orders: loadOrders(), filter:{keyword:"",tag:""} };
-
-function saveOrders(){ localStorage.setItem("orders_v1", JSON.stringify(state.orders)); }
-function loadOrders(){ try{ return JSON.parse(localStorage.getItem("orders_v1"))||[] }catch{ return [] } }
+const state = { cart:{}, filter:{keyword:"",tag:""}, ordersCache:[] };
 
 function pad2(n){return n.toString().padStart(2,"0")}
 function formatCurrency(n){return " $" + n.toLocaleString("zh-Hant")}
@@ -191,9 +179,34 @@ function generateSlotsForDate(dateStr){
   for(let t=start.getTime(); t<end.getTime(); t+=step){ arr.push(new Date(t)) }
   return arr;
 }
+
+async function apiList(dateStr){
+  const url = new URL(ENDPOINT);
+  url.searchParams.set('action','list');
+  if (dateStr) url.searchParams.set('date', dateStr);
+  url.searchParams.set('key', API_KEY); // 傳 key（簡易）
+  const res = await fetch(url.toString(), { method:'GET' });
+  const json = await res.json();
+  if (!json.ok) throw new Error('list failed');
+  return json.orders || [];
+}
+async function apiCreate(order){
+  const res = await fetch(ENDPOINT, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ apiKey: API_KEY, action:'create', order })
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error('create failed');
+  return json;
+}
+
 function bookedCapacityMap(dateStr){
-  const map={}, list=state.orders.filter(o=>o.date===dateStr);
-  for(const o of list){ const k=slotKey(new Date(o.assignedSlot)); map[k]=(map[k]||0)+o.capacityUnits }
+  const map={};
+  for(const o of state.ordersCache.filter(o=>o.date===dateStr)){
+    const k = slotKey(new Date(o.assignedSlot));
+    map[k] = (map[k]||0) + (o.capacityUnits||0);
+  }
   return map;
 }
 function itemsCapacityUnitsFromCart(){
@@ -206,7 +219,7 @@ function autoAssignSlot(dateStr, earliest){
   const booked=bookedCapacityMap(dateStr);
   for(const s of generateSlotsForDate(dateStr)){
     if(s.getTime()<earliest.getTime()) continue;
-    const used=booked[slotKey(s)]||0;
+    const used = booked[slotKey(s)] || 0;
     if(used + itemsCapacityUnitsFromCart() <= STORE.slotCapacity) return s;
   }
   return null;
@@ -215,8 +228,7 @@ function autoAssignSlot(dateStr, earliest){
 /* ===== UI：篩選與菜單 ===== */
 function initFilters(){
   const uniq=Array.from(new Set(MENU.flatMap(m=>m.tags))).sort();
-  const sel=el("#tagSelect");
-  for(const t of uniq){ const o=document.createElement("option"); o.value=t; o.textContent=t; sel.appendChild(o); }
+  const sel=el("#tagSelect"); uniq.forEach(t=>{const o=document.createElement("option");o.value=t;o.textContent=t;sel.appendChild(o)});
   el("#tagSelect").addEventListener("change",()=>{state.filter.tag=el("#tagSelect").value; renderMenu()});
   el("#searchInput").addEventListener("input",e=>{state.filter.keyword=e.target.value.trim(); renderMenu()});
 }
@@ -224,7 +236,7 @@ function renderMenu(){
   const root=el("#menuList"); root.innerHTML="";
   const q=state.filter.keyword.toLowerCase(), tag=state.filter.tag;
   const list=MENU.filter(m=>{
-    const hitQ=q ? (m.name.toLowerCase().includes(q) || (m.desc||"").toLowerCase().includes(q)) : true;
+    const hitQ=q ? (m.name.toLowerCase().includes(q)) : true;
     const hitT=tag ? m.tags.includes(tag) : true;
     return hitQ && hitT;
   });
@@ -244,7 +256,6 @@ function renderMenu(){
           <h3 class="text-lg font-semibold">${item.name}</h3>
           <div class="text-right font-semibold mono">${formatCurrency(item.price)}</div>
         </div>
-        ${item.desc?`<p class="text-slate-600 mt-1">${item.desc}</p>`:""}
         <div class="mt-2 flex flex-wrap gap-1">
           ${item.tags.map(t=>`<span class="badge text-xs px-2 py-1 bg-slate-100 text-slate-700 border border-slate-200">${t}</span>`).join("")}
           ${item.capacityUnits>0?`<span class="badge text-xs px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200">火鍋等效 1</span>`:""}
@@ -274,7 +285,6 @@ function renderMenu(){
 
 /* ===== 購物車 ===== */
 function addToCart(item, qty, spice=null){
-  // 將不同辣度視為不同品項（id:名稱:辣度）
   const key = spice ? `${item.id}:${spice}` : item.id;
   const displayName = spice ? `${item.name}（${spice}）` : item.name;
   if(!state.cart[key]) state.cart[key]={ item:{...item, name:displayName}, qty };
@@ -312,7 +322,7 @@ function renderCart(){
   el("#cartTotal").textContent=formatCurrency(Math.max(0,subtotal-discount));
 }
 
-/* ===== 下單 ===== */
+/* ===== 下單流程（改用後端） ===== */
 function populateEarliestTimeOptions(){
   const dateStr=todayIsoDate(), sel=el("#earliestTime");
   for(const s of generateSlotsForDate(dateStr)){
@@ -320,7 +330,13 @@ function populateEarliestTimeOptions(){
     opt.value=label; opt.textContent=label; sel.appendChild(opt);
   }
 }
-function onSubmitOrder(e){
+
+async function refreshTodayOrders(){
+  const dateStr=todayIsoDate();
+  state.ordersCache = await apiList(dateStr);
+}
+
+async function onSubmitOrder(e){
   e.preventDefault(); el("#formError").textContent="";
   if(!Object.values(state.cart).length){ el("#formError").textContent="購物車尚無商品。"; return; }
   const name=el("#customerName").value.trim(), phone=el("#customerPhone").value.trim();
@@ -335,7 +351,9 @@ function onSubmitOrder(e){
   const openAt = dateAtTime(dateStr, STORE.openHour, STORE.openMinute);
   if(earliest.getTime()<openAt.getTime()) earliest=openAt;
 
-  const slot=autoAssignSlot(dateStr, earliest);
+  // 先抓最新訂單再分配，避免超賣
+  await refreshTodayOrders();
+  const slot = autoAssignSlot(dateStr, earliest);
   if(!slot){ el("#formError").textContent="今日可用時段已滿，請改天或稍後再試。"; return; }
 
   const items=Object.values(state.cart).map(r=>({
@@ -357,20 +375,24 @@ function onSubmitOrder(e){
     createdAt:new Date().toISOString(),
     source:"web-customer",
   };
-  state.orders.push(order); saveOrders();
 
-  state.cart={}; renderCart();
-  el("#assignedSlotText").textContent=`${order.date} ${slotKey(new Date(order.assignedSlot))}`;
-  el("#successModal").classList.remove("hidden");
+  try{
+    await apiCreate(order);
+    state.cart={}; renderCart();
+    el("#assignedSlotText").textContent=`${order.date} ${slotKey(new Date(order.assignedSlot))}`;
+    el("#successModal").classList.remove("hidden");
+  }catch(err){
+    el("#formError").textContent="送單失敗，請稍後再試。";
+  }
 }
 
-/* ===== 啟動 ===== */
-document.addEventListener("DOMContentLoaded",()=>{
+document.addEventListener("DOMContentLoaded", async ()=>{
   initFilters(); renderMenu(); renderCart(); populateEarliestTimeOptions();
   el("#year").textContent=new Date().getFullYear();
   el("#checkoutForm").addEventListener("submit", onSubmitOrder);
   el("#clearCart").addEventListener("click",()=>{state.cart={}; renderCart()});
   el("#closeSuccess").addEventListener("click",()=>el("#successModal").classList.add("hidden"));
+  await refreshTodayOrders(); // 頁面載入先抓一次，讓占用條件更準
 });
 </script>
 </body>
