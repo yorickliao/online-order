@@ -230,13 +230,29 @@ async function apiList(dateStr){
   return json.orders || [];
 }
 async function apiCreate(order){
-  const json = await fetchJson(ENDPOINT, {
-    method:'POST',
-    body: JSON.stringify({ apiKey: API_KEY, action:'create', order })
+  // 方便除錯：在 Console 看得到送出的內容
+  console.log('creating order payload →', order);
+
+  const res = await fetchWithTimeout(ENDPOINT, {
+    method: 'POST',
+    // 不加 Content-Type，避免預檢；Apps Script 會從 postData.contents 讀字串
+    body: JSON.stringify({ apiKey: API_KEY, action: 'create', order })
   }, 20000);
-  if (!json.ok) throw new Error(json.error || 'create_failed');
-  return json;
+
+  const txt = await res.text();
+  let data;
+  try { data = JSON.parse(txt); }
+  catch { throw new Error('bad_json:'+txt.slice(0,200)); }
+
+  if (!data.ok) {
+    const detail = data.error || 'create_failed';
+    const reason = data.reason || data.message || '';
+    // 讓前端能顯示具體原因（例如 unauthorized / empty_order / exception:...）
+    throw new Error('server:'+detail+(reason?(':'+reason):''));
+  }
+  return data;
 }
+
 
 /* ===== 訂位計算 ===== */
 function bookedCapacityMap(dateStr){
@@ -473,12 +489,20 @@ async function onSubmitOrder(e){
     el("#successModal").classList.remove("hidden");
   }catch(err){
     console.error('submit_failed', err);
-    const msg =
-      (err && err.message === 'empty_order') ? '購物車尚無商品，無法送出。' :
-      (err && err.message === 'timeout')     ? '連線逾時，請再試一次。' :
-      (err && err.message === 'bad_json')    ? '伺服器回應格式異常，請再試一次。' :
-                                               '送單失敗，請稍後再試。';
-    showErr(msg);
+    const m = String(err && err.message || '');
+
+    if (m.includes('empty_order')) {
+      showErr('購物車尚無商品，無法送出。');
+    } else if (m.includes('timeout')) {
+      showErr('連線逾時，請再試一次。');
+    } else if (m.startsWith('bad_json')) {
+      showErr('伺服器回應格式異常：' + m.slice(8));
+    } else if (m.includes('server:unauthorized')) {
+      showErr('伺服器拒絕：金鑰或權限不符。請確認 API_KEY 與 Web App 權限（任何擁有連結的人）。');
+    } else if (m.startsWith('server:exception')) {
+      showErr('伺服器內部錯誤：' + m.replace(/^server:/,''));
+    } else {
+      showErr('送單失敗：' + m.replace(/^server:/,''));
   }finally{
     setBusy(false);
   }
