@@ -11,11 +11,13 @@
     .container-slim{max-width:1200px}.mono{font-variant-numeric:tabular-nums}
   </style>
 
-  <!-- 固定以台北時區計算與顯示 -->
+  <!-- Day.js + plugins（修正：加入 customParseFormat，避免 invalid time zone 錯誤） -->
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
   <script>
+    dayjs.extend(dayjs_plugin_customParseFormat);
     dayjs.extend(dayjs_plugin_utc);
     dayjs.extend(dayjs_plugin_timezone);
     const STORE_TZ = 'Asia/Taipei';
@@ -181,17 +183,21 @@ const state = { cart:{}, filter:{keyword:"",tag:""}, ordersCache:[] };
 function pad2(n){return n.toString().padStart(2,"0")}
 function formatCurrency(n){return " $" + n.toLocaleString("zh-Hant")}
 function todayIsoDate(){ return dayjs().tz().format('YYYY-MM-DD'); }
+
+/* 修正：所有以格式字串解析的地方，都帶第三個參數 STORE_TZ */
 function dateAtTime(dateStr,hh,mm){
-  return dayjs.tz(`${dateStr} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm').toDate();
+  return dayjs.tz(`${dateStr} ${pad2(hh)}:${pad2(mm)}`, 'YYYY-MM-DD HH:mm', STORE_TZ).toDate();
 }
 function roundUpToSlot(d, minutes){const ms=minutes*60*1000;return new Date(Math.ceil(d.getTime()/ms)*ms)}
 function slotKey(d){return dayjs(d).tz().format('HH:mm')}
 function generateSlotsForDate(dateStr){
-  const start = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
-  const end   = dayjs.tz(`${dateStr} ${String(STORE.closeHour).padStart(2,'0')}:${String(STORE.closeMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
+  const start = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`, 'YYYY-MM-DD HH:mm', STORE_TZ);
+  const end   = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`, 'YYYY-MM-DD HH:mm', STORE_TZ);
   const arr=[]; for(let t=start.clone(); t.isBefore(end); t=t.add(STORE.slotMinutes,'minute')) arr.push(t.toDate()); return arr;
 }
-function addDaysIso(dateStr, days){ return dayjs.tz(dateStr,'YYYY-MM-DD').add(days,'day').format('YYYY-MM-DD'); }
+function addDaysIso(dateStr, days){
+  return dayjs.tz(dateStr,'YYYY-MM-DD', STORE_TZ).add(days,'day').format('YYYY-MM-DD');
+}
 function cartTotalQty(){ return Object.values(state.cart).reduce((s,row)=> s + Math.max(0, parseInt(row?.qty||0,10)||0), 0); }
 
 /* ===== 可靠的 fetch 包裝（逾時可控） ===== */
@@ -229,8 +235,6 @@ async function apiList(dateStr){
   if (!json.ok) throw new Error(json.error || 'list_failed');
   return json.orders || [];
 }
-
-// 重點：把錯誤原文帶出來，方便判讀失敗原因
 async function apiCreate(order){
   console.log('creating order payload →', order);
   const res = await fetchWithTimeout(ENDPOINT, {
@@ -425,17 +429,20 @@ async function onSubmitOrder(e){
     if (!name || !phone) { showErr("請完整填寫姓名與電話。"); return; }
 
     let dateStr = todayIsoDate();
-    const openToday  = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
-    const closeToday = dayjs.tz(`${dateStr} ${String(STORE.closeHour).padStart(2,'0')}:${String(STORE.closeMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
+    const openToday  = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`, 'YYYY-MM-DD HH:mm', STORE_TZ);
+    const closeToday = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`, 'YYYY-MM-DD HH:mm', STORE_TZ);
 
     const earliestSel = el("#earliestTime").value;
     let earliest;
     if (earliestSel) {
-      earliest = dayjs.tz(`${dateStr} ${earliestSel}`, 'YYYY-MM-DD HH:mm');
+      earliest = dayjs.tz(`${dateStr} ${earliestSel}`, 'YYYY-MM-DD HH:mm', STORE_TZ);
     } else {
       const candidate = dayjs().tz().add(STORE.prepBufferMinutes, 'minute');
       if (candidate.isBefore(openToday))       earliest = openToday;
-      else if (candidate.isAfter(closeToday)) { dateStr = dayjs.tz(dateStr,'YYYY-MM-DD').add(1,'day').format('YYYY-MM-DD'); earliest = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm'); }
+      else if (candidate.isAfter(closeToday)) {
+        dateStr = dayjs.tz(dateStr,'YYYY-MM-DD', STORE_TZ).add(1,'day').format('YYYY-MM-DD');
+        earliest = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`, 'YYYY-MM-DD HH:mm', STORE_TZ);
+      }
       else                                     earliest = candidate;
     }
     const rounded = roundUpToSlot(earliest.toDate(), STORE.slotMinutes);
@@ -449,7 +456,7 @@ async function onSubmitOrder(e){
 
     let slot = autoAssignSlot(dateStr, rounded);
     if (!slot) {
-      const tmr = dayjs.tz(dateStr,'YYYY-MM-DD').add(1,'day').format('YYYY-MM-DD');
+      const tmr = dayjs.tz(dateStr,'YYYY-MM-DD', STORE_TZ).add(1,'day').format('YYYY-MM-DD');
       try { state.ordersCache = await apiList(tmr); } catch(_){}
       const tmrOpen = dateAtTime(tmr, STORE.openHour, STORE.openMinute);
       slot = autoAssignSlot(tmr, tmrOpen);
