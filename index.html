@@ -192,12 +192,12 @@ async function apiList(dateStr){
 }
 async function apiCreate(order){
   const res = await fetch(ENDPOINT, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ apiKey: API_KEY, action:'create', order })
+    method: 'POST',
+    // 不要加 headers.Content-Type；Apps Script 可直接讀 JSON 字串
+    body: JSON.stringify({ apiKey: API_KEY, action: 'create', order })
   });
   const json = await res.json();
-  if (!json.ok) throw new Error('create failed');
+  if (!json.ok) throw new Error(json.error || 'create_failed');
   return json;
 }
 
