@@ -8,7 +8,19 @@
   <meta name="color-scheme" content="light dark">
   <style>
     .card{border-radius:1rem}.btn{border-radius:1rem}.container-slim{max-width:1200px}.mono{font-variant-numeric:tabular-nums}
+    .banner{display:none}
   </style>
+
+  <!-- 固定以台北時區計算與顯示 -->
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
+  <script>
+    dayjs.extend(dayjs_plugin_utc);
+    dayjs.extend(dayjs_plugin_timezone);
+    const STORE_TZ = 'Asia/Taipei';
+    dayjs.tz.setDefault(STORE_TZ);
+  </script>
 </head>
 <body class="bg-slate-50 text-slate-900">
 
@@ -34,6 +46,9 @@ if (input !== OWNER_PIN) { alert("PIN 錯誤"); location.href = "index.html"; }
       <button id="exportCsv" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">匯出 CSV</button>
       <button id="clearToday" class="btn px-3 py-2 bg-red-600 text-white hover:bg-red-700">清空今日</button>
     </div>
+  </div>
+  <div id="errBanner" class="banner bg-red-50 text-red-700 text-sm px-4 py-2 border-t border-red-100">
+    讀取發生錯誤，將於數秒後自動重試…
   </div>
 </header>
 
@@ -88,29 +103,32 @@ if (input !== OWNER_PIN) { alert("PIN 錯誤"); location.href = "index.html"; }
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbycF73j0CR5HEpe4Rm5Zn1tQU9LS0Yq2dLlNmsXax2pd2C05DUGv1ZPlbksa7csCp5rsw/exec';
 const API_KEY  = '326hotpot326';
 
-/* ===== 共用工具與設定 ===== */
+/* ===== 共用工具與設定（台北時區版） ===== */
 const STORE = { openHour:16, openMinute:30, closeHour:20, closeMinute:30, slotMinutes:15, slotCapacity:7 };
 const el = s => document.querySelector(s);
 let showAll = false;
-let currentList = [];
+let allOrders = [];
+let polling = null;
 
 function pad2(n){return n.toString().padStart(2,"0")}
 function formatCurrency(n){return " $" + n.toLocaleString("zh-Hant")}
-function todayIsoDate(){const d=new Date();return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`}
-function dateAtTime(dateStr,hh,mm){const d=new Date(dateStr+"T00:00:00");d.setHours(hh,mm,0,0);return d;}
-function slotKey(d){return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`}
+function todayIsoDate(){ return dayjs().tz().format('YYYY-MM-DD'); }
+function dateAtTime(dateStr,hh,mm){
+  return dayjs.tz(`${dateStr} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm').toDate();
+}
+function slotKey(d){ return dayjs(d).tz().format('HH:mm'); }
 function generateSlotsForDate(dateStr){
-  const start=dateAtTime(dateStr,STORE.openHour,STORE.openMinute);
-  const end=dateAtTime(dateStr,STORE.closeHour,STORE.closeMinute);
-  const step=STORE.slotMinutes*60*1000, arr=[];
-  for(let t=start.getTime(); t<end.getTime(); t+=step){ arr.push(new Date(t)) }
-  return arr;
+  const start = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
+  const end   = dayjs.tz(`${dateStr} ${String(STORE.closeHour).padStart(2,'0')}:${String(STORE.closeMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
+  const arr=[]; for(let t=start.clone(); t.isBefore(end); t=t.add(STORE.slotMinutes,'minute')) arr.push(t.toDate()); return arr;
+}
+function isInStoreDay(isoString, dateStr){
+  return dayjs(isoString).tz().format('YYYY-MM-DD') === dateStr;
 }
 
-async function apiList(dateStr){
+async function apiListAll(){
   const url = new URL(ENDPOINT);
   url.searchParams.set('action','list');
-  if (dateStr) url.searchParams.set('date', dateStr);
   url.searchParams.set('key', API_KEY);
   const res = await fetch(url.toString(), { method:'GET' });
   const json = await res.json();
@@ -127,14 +145,18 @@ async function apiDelete(id){
   return json;
 }
 
-function slotUsageMap(dateStr, list){
-  const map={}; for(const o of list.filter(x=>x.date===dateStr)){ const k=slotKey(new Date(o.assignedSlot)); map[k]=(map[k]||0)+o.capacityUnits } return map;
-}
+function render(){
+  const dateStr = el("#datePicker").value || todayIsoDate();
+  const list = showAll ? allOrders : allOrders.filter(o=>isInStoreDay(o.assignedSlot, dateStr));
 
-function render(dateStr){
-  const list = showAll ? currentList : currentList.filter(o=>o.date===dateStr);
-  // 時段佔用
-  const m=slotUsageMap(dateStr, list), sum=el("#slotSummary"); sum.innerHTML="";
+  // 時段佔用（選定那一天）
+  const m={};
+  const dayOrders = allOrders.filter(o=>isInStoreDay(o.assignedSlot, dateStr));
+  for(const o of dayOrders){
+    const k = slotKey(new Date(o.assignedSlot));
+    m[k] = (m[k]||0) + (o.capacityUnits||0);
+  }
+  const sum=el("#slotSummary"); sum.innerHTML="";
   for(const s of generateSlotsForDate(dateStr)){
     const k=slotKey(s), used=m[k]||0;
     const div=document.createElement("div");
@@ -145,6 +167,7 @@ function render(dateStr){
       <div class="h-2 bg-slate-100 rounded mt-1"><div class="h-2 bg-slate-900 rounded" style="width:${Math.min(100, used/STORE.slotCapacity*100)}%"></div></div>`;
     sum.appendChild(div);
   }
+
   // 訂單表
   const tbody=el("#ordersBody"); tbody.innerHTML="";
   let totalCap=0, revenue=0;
@@ -152,7 +175,7 @@ function render(dateStr){
     totalCap+=o.capacityUnits; revenue+=o.total;
     const tr=document.createElement("tr");
     tr.innerHTML=`
-      <td class="p-2 border-b">${slotKey(new Date(o.assignedSlot))}</td>
+      <td class="p-2 border-b">${dayjs(o.assignedSlot).tz().format('HH:mm')}</td>
       <td class="p-2 border-b">${o.customer?.name||""}</td>
       <td class="p-2 border-b">${o.customer?.phone||""}</td>
       <td class="p-2 border-b">${o.items.map(it=>`${it.name}×${it.qty}`).join("，")}</td>
@@ -166,6 +189,8 @@ function render(dateStr){
   el("#statOrders").textContent=String(list.length);
   el("#statCapacity").textContent=String(totalCap);
   el("#statRevenue").textContent=formatCurrency(revenue);
+
+  // 綁刪除
   tbody.querySelectorAll(".del").forEach(btn=>{
     btn.addEventListener("click", async ()=>{
       if (!confirm("確定刪除這張訂單？")) return;
@@ -176,18 +201,25 @@ function render(dateStr){
 }
 
 async function reloadAndRender(){
-  const dateStr = el("#datePicker").value || todayIsoDate();
-  currentList = await apiList(showAll ? '' : dateStr);
-  render(dateStr);
+  try{
+    el("#errBanner").style.display = 'none';
+    allOrders = await apiListAll();
+    render();
+  }catch(err){
+    console.error('list_failed', err);
+    el("#errBanner").style.display = 'block';
+  }
 }
 
 function exportCsv(){
   const dateStr = el("#datePicker").value || todayIsoDate();
-  const list = showAll ? currentList : currentList.filter(o=>o.date === dateStr);
-  const rows=[["訂單ID","日期","時段","姓名","電話","品項","火鍋等效","小計","折扣","總計","建立時間"]];
+  const list = showAll ? allOrders : allOrders.filter(o=>isInStoreDay(o.assignedSlot, dateStr));
+  const rows=[["訂單ID","日期(台北)","時段","姓名","電話","品項","火鍋等效","小計","折扣","總計","建立時間"]];
   for(const o of list){
     rows.push([
-      o.id,o.date,slotKey(new Date(o.assignedSlot)),
+      o.id,
+      dayjs(o.assignedSlot).tz().format('YYYY-MM-DD'),
+      dayjs(o.assignedSlot).tz().format('HH:mm'),
       o.customer?.name||"",o.customer?.phone||"",
       o.items.map(it=>`${it.name}×${it.qty}`).join(" / "),
       o.capacityUnits,o.subtotal,o.discount,o.total,o.createdAt
@@ -202,24 +234,25 @@ function exportCsv(){
 
 document.addEventListener("DOMContentLoaded", async ()=>{
   el("#year").textContent=new Date().getFullYear();
-  const dp = el("#datePicker"); dp.value = todayIsoDate();
+  const dp = el("#datePicker"); dp.value = dayjs().tz().format('YYYY-MM-DD');
+
   el("#toggleAll").addEventListener("click", async ()=>{
     showAll = !showAll;
     el("#toggleAll").textContent = showAll ? '只看今天' : '顯示全部';
-    await reloadAndRender();
+    render();
   });
   el("#exportCsv").addEventListener("click", exportCsv);
   el("#clearToday").addEventListener("click", async ()=>{
-    if(!confirm("清空今日所有訂單？此動作無法還原。")) return;
-    const today = todayIsoDate();
-    const todayList = currentList.filter(o=>o.date===today);
-    for (const o of todayList) { await apiDelete(o.id); }
+    const dateStr = el("#datePicker").value || todayIsoDate();
+    if(!confirm(`清空 ${dateStr} 這一天的所有訂單？此動作無法還原。`)) return;
+    const list = allOrders.filter(o=>isInStoreDay(o.assignedSlot, dateStr));
+    for (const o of list) { await apiDelete(o.id); }
     await reloadAndRender();
   });
-  dp.addEventListener("change", reloadAndRender);
+  dp.addEventListener("change", render);
 
   await reloadAndRender();
-  setInterval(reloadAndRender, 2000);
+  polling = setInterval(reloadAndRender, 2000);
 });
 </script>
 </body>
