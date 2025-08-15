@@ -124,7 +124,7 @@ const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxvRLFEEufoN3dIwyBeTZp
 const API_KEY  = '326hotpot326';
 
 // 簡易密碼（自行修改）。也可用網址 ?pass=xxxxx 直接帶入
-const OWNER_PASS = '326boss';
+const OWNER_PASS = '326';
 
 // 營運設定（僅供容量顯示）
 const STORE = { slotCapacity: 7 };
@@ -251,14 +251,13 @@ function renderOrders(ordersRaw){
   try{
     const orders = sanitizeOrders(ordersRaw);
 
-    // 依時段分組（assignedSlot -> HH:mm）
     const groups = {};
     for (const o of orders) {
-      const hhmm = slotKey(o.assignedSlot);
+      const hhmm = dayjs(o.assignedSlot).tz().format('HH:mm');
       (groups[hhmm] ||= []).push(o);
     }
     const slots = Object.keys(groups).sort((a,b)=> a.localeCompare(b));
-    const root = el('#slotList');
+    const root = document.querySelector('#slotList');
     root.innerHTML = '';
 
     if (slots.length === 0) {
@@ -283,9 +282,9 @@ function renderOrders(ordersRaw){
         <div class="w-full h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
           <div class="h-2 bg-slate-900" style="width:${pct}%"></div>
         </div>
-        <div class="mt-4 divide-y divide-slate-200" id="list-${hhmm}"></div>
+        <div class="mt-4 divide-y divide-slate-200 orders"></div>
       `;
-      const list = sec.querySelector(`#list-${hhmm}`);
+      const list = sec.querySelector('.orders'); // 不再用含冒號的 id
 
       for (const o of arr) {
         const itemsText = (Array.isArray(o.items)?o.items:[])
@@ -330,7 +329,7 @@ function renderOrders(ordersRaw){
     renderSummary(orders);
   }catch(err){
     console.error('renderOrders_error', err);
-    const root = el('#slotList');
+    const root = document.querySelector('#slotList');
     root.innerHTML = `<div class="card bg-white p-6 text-red-600">渲染失敗：${String(err && err.message || err)}</div>`;
   }
 }
