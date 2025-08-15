@@ -14,11 +14,13 @@
     .container-slim{max-width:1200px}
   </style>
 
-  <!-- Day.js + TZ（固定用台北） -->
+  <!-- Day.js + TZ（加入 customParseFormat，避免 invalid time zone 類錯誤） -->
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
   <script>
+    dayjs.extend(dayjs_plugin_customParseFormat);
     dayjs.extend(dayjs_plugin_utc);
     dayjs.extend(dayjs_plugin_timezone);
     const STORE_TZ = 'Asia/Taipei';
@@ -114,8 +116,10 @@ const el = s => document.querySelector(s);
 function pad2(n){ return String(n).padStart(2,'0'); }
 function formatCurrency(n){ return '$' + Number(n||0).toLocaleString('zh-Hant'); }
 function todayYMD(){ return dayjs().tz().format('YYYY-MM-DD'); }
+// 注意：這裡只格式化，不做自訂解析，所以不會觸發 invalid time zone 問題
 function slotKey(iso){ return dayjs(iso).tz().format('HH:mm'); }
 
+/* ===== 可靠的 fetch 包裝 ===== */
 async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -164,7 +168,7 @@ function renderSummary(orders){
 }
 
 function renderOrders(orders){
-  // 依時段分組
+  // 依時段分組（以 assignedSlot 的 HH:mm）
   const groups = {};
   for (const o of orders) {
     const k = slotKey(o.assignedSlot || o.createdAt || new Date().toISOString());
@@ -182,7 +186,6 @@ function renderOrders(orders){
     return;
   }
 
-  // 逐時段輸出
   const frag = document.createDocumentFragment();
   for (const hhmm of slots) {
     const arr = groups[hhmm].sort((a,b)=> (a.createdAt||'').localeCompare(b.createdAt||''));
@@ -239,7 +242,7 @@ function renderOrders(orders){
       e.currentTarget.disabled = true;
       try {
         await apiDelete(id);
-        await refreshOrders(); // 重新抓
+        await refreshOrders();
       } catch (err) {
         console.error('delete_failed', err);
         alert('刪除失敗，請稍後再試');
@@ -265,7 +268,6 @@ async function refreshOrders(){
     el('#lastSync').textContent = dayjs().tz().format('YYYY-MM-DD HH:mm:ss');
   } catch (e) {
     console.error('refresh failed', e);
-    // 顯示錯誤
     const root = el('#slotList');
     if (root.innerHTML.trim() === '') {
       root.innerHTML = `<div class="card bg-white p-6 text-red-600">讀取失敗，請點「刷新」重試。</div>`;
@@ -274,14 +276,8 @@ async function refreshOrders(){
     polling = false;
   }
 }
-
-function startAuto(){
-  if (timer) clearInterval(timer);
-  timer = setInterval(refreshOrders, 15000);
-}
-function stopAuto(){
-  if (timer) { clearInterval(timer); timer = null; }
-}
+function startAuto(){ if (timer) clearInterval(timer); timer = setInterval(refreshOrders, 15000); }
+function stopAuto(){ if (timer) { clearInterval(timer); timer = null; } }
 
 /* ===== 簡易密碼門檻 ===== */
 function checkPass(input){
@@ -308,7 +304,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   el('#dateInput').addEventListener('change', refreshOrders);
   el('#autoToggle').addEventListener('change', (e)=> e.target.checked ? startAuto() : stopAuto());
 
-  // 目標：頁面可見時才輪詢
+  // 頁面可見時才輪詢
   document.addEventListener('visibilitychange', ()=>{
     if (document.hidden) stopAuto();
     else { refreshOrders(); if (el('#autoToggle').checked) startAuto(); }
