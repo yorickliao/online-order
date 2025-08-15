@@ -5,16 +5,26 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>326臭臭鍋 訂單管理</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <meta name="color-scheme" content="light dark">
+  <!-- 僅亮色，避免 iOS Safari 把原生表單變黑底看不到字 -->
+  <meta name="color-scheme" content="light">
   <style>
     .card{border-radius:1rem}
     .btn{border-radius:1rem}
     .badge{border-radius:999px}
     .mono{font-variant-numeric:tabular-nums}
     .container-slim{max-width:1200px}
+    /* 強制表單控制元件走亮色（修正手機上看不到字） */
+    input, select, textarea, option, button { color-scheme: light; }
+    input, select, textarea {
+      background:#fff !important;
+      color:#0f172a !important;            /* slate-900 */
+      -webkit-text-fill-color:#0f172a;     /* iOS Safari */
+      border-color:#cbd5e1;                /* slate-300 */
+    }
+    select option { background:#fff; color:#0f172a; }
   </style>
 
-  <!-- Day.js + TZ（帶 customParseFormat，雖然本頁幾乎不解析字串，但保險） -->
+  <!-- Day.js + TZ -->
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
@@ -50,7 +60,7 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
       <div class="flex items-center gap-2">
         <label class="text-sm text-slate-600 shrink-0">查詢日期</label>
-        <input id="dateInput" type="date" class="w-full rounded-xl border border-slate-300 px-3 py-2">
+        <input id="dateInput" type="date" class="w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900">
         <button id="btnToday" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">今天</button>
       </div>
       <div class="flex items-center gap-2">
@@ -109,7 +119,7 @@
   <div class="card bg-white p-6 w-[92%] max-w-sm border border-slate-200">
     <h2 class="text-lg font-semibold mb-2">老闆入口</h2>
     <p class="text-slate-600 text-sm mb-3">請輸入管理密碼</p>
-    <input id="passInput" type="password" class="w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="輸入密碼">
+    <input id="passInput" type="password" class="w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" placeholder="輸入密碼">
     <p id="passError" class="text-red-600 text-sm mt-2"></p>
     <div class="mt-4 flex justify-end gap-2">
       <button id="passSubmit" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">進入</button>
@@ -123,7 +133,7 @@
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxvRLFEEufoN3dIwyBeTZp315vWdmxZYL4cqEubJf6Gcy7voEKw0UNbZ25q3_7KLTQERw/exec';
 const API_KEY  = '326hotpot326';
 
-// 簡易密碼（自行修改）。也可用網址 ?pass=xxxxx 直接帶入
+// 簡易密碼（可配合網址 ?pass=xxxxx）
 const OWNER_PASS = '326';
 
 // 營運設定（僅供容量顯示）
@@ -135,33 +145,22 @@ const dlog = (...a) => { if (DEBUG) console.log('[owner]', ...a); };
 
 /* ===== 小工具 ===== */
 const el = s => document.querySelector(s);
-function pad2(n){ return String(n).padStart(2,'0'); }
 function formatCurrency(n){ return '$' + Number(n||0).toLocaleString('zh-Hant'); }
-function todayYMD(){
-  return dayjs().tz().format('YYYY-MM-DD');
-}
-function slotKey(iso){
-  // 只格式化，不解析字串，避免 invalid time zone
-  return dayjs(iso).tz().format('HH:mm');
-}
+function todayYMD(){ return dayjs().tz().format('YYYY-MM-DD'); }
+function slotKey(iso){ return dayjs(iso).tz().format('HH:mm'); }
 
 /* ===== 可靠的 fetch 包裝 ===== */
 async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(resource, { ...options, signal: ctrl.signal });
-    return res;
-  } catch (err) {
-    if (err && err.name === 'AbortError') throw new Error('timeout');
-    throw err;
-  } finally { clearTimeout(timer); }
+  try { return await fetch(resource, { ...options, signal: ctrl.signal }); }
+  catch (err) { if (err?.name === 'AbortError') throw new Error('timeout'); throw err; }
+  finally { clearTimeout(timer); }
 }
 async function fetchJson(url, options = {}, timeoutMs = 15000) {
   const res = await fetchWithTimeout(url, options, timeoutMs);
   const txt = await res.text();
-  try { return JSON.parse(txt); }
-  catch { throw new Error('bad_json'); }
+  try { return JSON.parse(txt); } catch { throw new Error('bad_json'); }
 }
 
 /* ===== 後端 API ===== */
@@ -174,31 +173,18 @@ async function apiList(dateStr){
   const data = await fetchJson(url.toString());
   dlog('apiList response ←', data);
   if (!data.ok) throw new Error(data.error || 'list_failed');
-  updateDebugPanel({
-    lastUrl: url.toString(),
-    lastOk: data.ok,
-    lastError: data.error || '',
-    count: (data.orders||[]).length,
-    raw: JSON.stringify(data, null, 2)
-  });
+  updateDebugPanel({ lastUrl:url.toString(), lastOk:data.ok, lastError:data.error||'', count:(data.orders||[]).length, raw:JSON.stringify(data,null,2) });
   return data.orders || [];
 }
-
 async function apiDelete(id){
   dlog('apiDelete →', id);
   const data = await fetchJson(ENDPOINT, {
-    method: 'POST',
-    body: JSON.stringify({ apiKey: API_KEY, action: 'delete', id })
+    method:'POST',
+    body: JSON.stringify({ apiKey: API_KEY, action:'delete', id })
   }, 15000);
   dlog('apiDelete response ←', data);
   if (!data.ok) throw new Error(data.error || 'delete_failed');
-  updateDebugPanel({
-    lastUrl: ENDPOINT + ' (POST delete)',
-    lastOk: data.ok,
-    lastError: data.error || '',
-    count: undefined,
-    raw: JSON.stringify(data, null, 2)
-  });
+  updateDebugPanel({ lastUrl:ENDPOINT+' (POST delete)', lastOk:data.ok, lastError:data.error||'', raw:JSON.stringify(data,null,2) });
   return data;
 }
 
@@ -209,30 +195,21 @@ function sanitizeOrders(list){
   for (const o of list) {
     try {
       const id = String(o?.id || '');
-      const assignedISO = (() => {
-        const raw = o?.assignedSlot || o?.createdAt || '';
-        const d = new Date(raw);
-        return isNaN(d) ? '' : d.toISOString();
-      })();
-      if (!assignedISO) continue; // 沒有效時段就略過
-
+      const raw = o?.assignedSlot || o?.createdAt || '';
+      const d = new Date(raw);
+      if (isNaN(d)) continue; // 無效時間跳過
       out.push({
         id,
-        assignedSlot: assignedISO,
+        assignedSlot: d.toISOString(),
         capacityUnits: Number(o?.capacityUnits || 0),
-        customer: {
-          name: String(o?.customer?.name || ''),
-          phone: String(o?.customer?.phone || '')
-        },
+        customer: { name: String(o?.customer?.name || ''), phone: String(o?.customer?.phone || '') },
         items: Array.isArray(o?.items) ? o.items : [],
         subtotal: Number(o?.subtotal || 0),
         discount: Number(o?.discount || 0),
         total: Number(o?.total || 0),
-        createdAt: o?.createdAt || assignedISO,
+        createdAt: o?.createdAt || d.toISOString(),
       });
-    } catch (e) {
-      console.warn('sanitizeOrders: skip bad row', o, e);
-    }
+    } catch(e){ console.warn('sanitizeOrders: skip bad row', o, e); }
   }
   return out;
 }
@@ -246,24 +223,17 @@ function renderSummary(orders){
   el('#sumCapacity').textContent = sumCapacity;
   el('#sumRevenue').textContent = formatCurrency(sumRevenue);
 }
-
 function renderOrders(ordersRaw){
   try{
     const orders = sanitizeOrders(ordersRaw);
-
     const groups = {};
-    for (const o of orders) {
-      const hhmm = dayjs(o.assignedSlot).tz().format('HH:mm');
-      (groups[hhmm] ||= []).push(o);
-    }
-    const slots = Object.keys(groups).sort((a,b)=> a.localeCompare(b));
-    const root = document.querySelector('#slotList');
-    root.innerHTML = '';
+    for (const o of orders) { const k = slotKey(o.assignedSlot); (groups[k] ||= []).push(o); }
+    const slots = Object.keys(groups).sort();
+    const root = el('#slotList'); root.innerHTML = '';
 
-    if (slots.length === 0) {
+    if (!slots.length){
       root.innerHTML = '<div class="card bg-white p-6 text-slate-600">本日尚無訂單。</div>';
-      renderSummary([]);
-      return;
+      renderSummary([]); return;
     }
 
     const frag = document.createDocumentFragment();
@@ -284,11 +254,10 @@ function renderOrders(ordersRaw){
         </div>
         <div class="mt-4 divide-y divide-slate-200 orders"></div>
       `;
-      const list = sec.querySelector('.orders'); // 不再用含冒號的 id
+      const list = sec.querySelector('.orders');
 
       for (const o of arr) {
-        const itemsText = (Array.isArray(o.items)?o.items:[])
-          .map(it => `${it.name}×${it.qty}`).join('、') || '(無品項)';
+        const itemsText = (Array.isArray(o.items)?o.items:[]).map(it => `${it.name}×${it.qty}`).join('、') || '(無品項)';
         const row = document.createElement('div');
         row.className = 'py-3 flex items-start justify-between gap-4';
         row.innerHTML = `
@@ -329,8 +298,7 @@ function renderOrders(ordersRaw){
     renderSummary(orders);
   }catch(err){
     console.error('renderOrders_error', err);
-    const root = document.querySelector('#slotList');
-    root.innerHTML = `<div class="card bg-white p-6 text-red-600">渲染失敗：${String(err && err.message || err)}</div>`;
+    el('#slotList').innerHTML = `<div class="card bg-white p-6 text-red-600">渲染失敗：${String(err?.message || err)}</div>`;
   }
 }
 
@@ -341,37 +309,28 @@ async function refreshOrders(){
   polling = true;
   const dateStr = el('#dateInput').value || todayYMD();
   dlog('refreshOrders date →', dateStr);
-  try {
-    const orders = await apiList(dateStr);       // 抓資料
+  try{
+    const orders = await apiList(dateStr);
     dlog('orders len:', orders.length);
-    renderOrders(orders);                         // 渲染
+    renderOrders(orders);
     el('#lastSync').textContent = dayjs().tz().format('YYYY-MM-DD HH:mm:ss');
     updateDebugPanel({ lastDate: dateStr, grouped: groupBySlot(orders) });
-  } catch (e) {
+  }catch(e){
     console.error('refresh failed (fetch stage)', e);
-    updateDebugPanel({ lastError: String(e && e.message || e) });
-    const root = el('#slotList');
-    root.innerHTML = `<div class="card bg-white p-6 text-red-600">
-      讀取失敗，請點「刷新」重試。<br><span class="text-xs">${String(e && e.message || e)}</span>
+    updateDebugPanel({ lastError: String(e?.message || e) });
+    el('#slotList').innerHTML = `<div class="card bg-white p-6 text-red-600">
+      讀取失敗，請點「刷新」重試。<br><span class="text-xs">${String(e?.message || e)}</span>
     </div>`;
-  } finally {
-    polling = false;
-  }
+  }finally{ polling = false; }
 }
 function startAuto(){ if (timer) clearInterval(timer); timer = setInterval(refreshOrders, 15000); }
 function stopAuto(){ if (timer) { clearInterval(timer); timer = null; } }
-
-/* ===== 依時段分組（供 Debug 用） ===== */
 function groupBySlot(orders){
-  const g={};
-  for(const o of (orders||[])){
-    const k = o?.assignedSlot ? dayjs(o.assignedSlot).tz().format('HH:mm') : '—';
-    (g[k] ||= []).push(o.id);
-  }
+  const g={}; for(const o of (orders||[])){ const k = o?.assignedSlot ? dayjs(o.assignedSlot).tz().format('HH:mm') : '—'; (g[k] ||= []).push(o.id); }
   return g;
 }
 
-/* ===== Debug Panel 邏輯 ===== */
+/* ===== Debug Panel ===== */
 function updateDebugPanel(patch){
   if (!DEBUG) return;
   const root = document.getElementById('dbg');
@@ -397,48 +356,29 @@ function checkPass(input){
   const urlPass = new URL(location.href).searchParams.get('pass');
   const pass = (input || '').trim();
   const valid = (urlPass && urlPass === OWNER_PASS) || (pass && pass === OWNER_PASS);
-  if (valid) {
-    localStorage.setItem('ownerAuth', '1');
-    el('#authGate').style.display = 'none';
-    return true;
-  }
+  if (valid) { localStorage.setItem('ownerAuth', '1'); el('#authGate').style.display = 'none'; return true; }
   return false;
 }
 
 /* ===== 啟動 ===== */
 document.addEventListener('DOMContentLoaded', ()=>{
-  // 日期欄預設為台北今天
   el('#dateInput').value = todayYMD();
-  el('#btnToday').addEventListener('click', ()=>{
-    el('#dateInput').value = todayYMD();
-    refreshOrders();
-  });
+  el('#btnToday').addEventListener('click', ()=>{ el('#dateInput').value = todayYMD(); refreshOrders(); });
   el('#btnRefresh').addEventListener('click', refreshOrders);
   el('#dateInput').addEventListener('change', refreshOrders);
   el('#autoToggle').addEventListener('change', (e)=> e.target.checked ? startAuto() : stopAuto());
 
-  // 頁面可見時才輪詢
   document.addEventListener('visibilitychange', ()=>{
-    if (document.hidden) stopAuto();
-    else { refreshOrders(); if (el('#autoToggle').checked) startAuto(); }
+    if (document.hidden) stopAuto(); else { refreshOrders(); if (el('#autoToggle').checked) startAuto(); }
   });
 
-  // 密碼門檻
   const saved = localStorage.getItem('ownerAuth') === '1';
-  if (saved || checkPass('')) {
-    el('#authGate').style.display = 'none';
-    refreshOrders();
-    el('#autoToggle').checked = true;
-    startAuto();
-  } else {
+  if (saved || checkPass('')) { el('#authGate').style.display = 'none'; refreshOrders(); el('#autoToggle').checked = true; startAuto(); }
+  else {
     const submit = () => {
       const ok = checkPass(el('#passInput').value);
       if (!ok) el('#passError').textContent = '密碼錯誤';
-      else {
-        refreshOrders();
-        el('#autoToggle').checked = true;
-        startAuto();
-      }
+      else { refreshOrders(); el('#autoToggle').checked = true; startAuto(); }
     };
     el('#passSubmit').addEventListener('click', submit);
     el('#passInput').addEventListener('keyup', (e)=>{ if (e.key === 'Enter') submit(); });
