@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>326臭臭鍋 線上點餐（客人）</title>
+  <title>326臭臭鍋 線上點餐</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <meta name="color-scheme" content="light dark">
   <style>
-    .card{border-radius:1rem}.btn{border-radius:1rem}.badge{border-radius:999px}.container-slim{max-width:1200px}.mono{font-variant-numeric:tabular-nums}
+    .card{border-radius:1rem}.btn{border-radius:1rem}.badge{border-radius:999px}
+    .container-slim{max-width:1200px}.mono{font-variant-numeric:tabular-nums}
   </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
@@ -17,11 +18,11 @@
       <div class="w-10 h-10 bg-slate-900 text-white rounded-xl grid place-items-center text-lg font-bold select-none">店</div>
       <div>
         <div class="text-xl font-semibold">326臭臭鍋 線上點餐</div>
-        <div class="text-xs text-slate-500">營業時間 16:30–20:30</div>
+        <div class="text-xs text-slate-500">營業時間 16:30–20:30 ・ 每 15 分鐘上限 7 鍋</div>
       </div>
     </div>
     <div class="flex items-center gap-2">
-      <a href="owner.html" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">老闆入口</a>
+      <!-- 客人版不顯示老闆入口 -->
       <a href="#cart" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">購物車</a>
     </div>
   </div>
@@ -48,7 +49,7 @@
     <div id="menuList" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
   </section>
 
-  <!-- 購物車區 -->
+  <!-- 購物車與結帳 -->
   <aside id="cart" class="space-y-6">
     <div class="card bg-white p-5 sticky top-[88px]">
       <h2 class="text-lg font-semibold mb-4">購物車</h2>
@@ -73,16 +74,16 @@
       <form id="checkoutForm" class="space-y-4" autocomplete="off">
         <div>
           <label class="text-sm text-slate-600">姓名</label>
-          <input required id="customerName" type="text" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+          <input required id="customerName" type="text" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
         </div>
         <div>
           <label class="text-sm text-slate-600">電話</label>
           <input required id="customerPhone" type="tel" pattern="[0-9\\-\\+\\s]{8,}" placeholder="09xx-xxx-xxx"
-                 class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+                 class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
         </div>
         <div>
           <label class="text-sm text-slate-600">最早可取餐時間（選填）</label>
-          <select id="earliestTime" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900">
+          <select id="earliestTime" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2">
             <option value="">不指定（系統自動安排）</option>
           </select>
           <p class="text-xs text-slate-500 mt-1">未選時，系統會從「現在時間 + 準備緩衝」開始排。</p>
@@ -104,7 +105,7 @@
     <h3 class="text-xl font-semibold mb-2">下單成功</h3>
     <p class="text-slate-700">您的取餐時段為：</p>
     <p id="assignedSlotText" class="text-2xl font-bold mt-1"></p>
-    <p class="text-slate-600 mt-2">此訂單僅示範，暫存於您的瀏覽器。</p>
+    <p class="text-slate-600 mt-2">此訂單暫存於本機瀏覽器（示範）。</p>
     <div class="mt-4 flex justify-end">
       <button id="closeSuccess" class="btn px-4 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
     </div>
@@ -121,7 +122,7 @@
 </footer>
 
 <script>
-/** 共用設定（客人版） **/
+/* ===== 設定 ===== */
 const STORE = {
   name: "326臭臭鍋",
   openHour: 16, openMinute: 30,
@@ -133,18 +134,46 @@ const STORE = {
   discountAmount: 100,
 };
 
-// 商品（capacityUnits=1 會占用鍋數）
+/* ===== 菜單 =====
+   鍋物（等效 1）＋辣度選擇（泡菜鍋無「無辣」）
+   主食、單點（等效 0）
+*/
+const SPICE = ["無辣","小辣","中辣","大辣"];
 const MENU = [
-  { id:"hp_classic", name:"招牌麻辣鍋", price:280, desc:"經典麻辣湯底（小辣）", tags:["鍋物","辣"], capacityUnits:1 },
-  { id:"hp_mushroom", name:"養生菇菇鍋", price:260, desc:"清爽菇菇湯底", tags:["鍋物","素"], capacityUnits:1 },
-  { id:"hp_tomato", name:"番茄牛肉鍋", price:300, desc:"酸香番茄與牛肉片", tags:["鍋物"], capacityUnits:1 },
-  { id:"side_platter", name:"綜合拼盤", price:150, desc:"時蔬/豆腐/菇類拼盤", tags:["加點"], capacityUnits:0 },
-  { id:"rice", name:"白飯", price:20, desc:"熱白飯", tags:["主食"], capacityUnits:0 },
-  { id:"drink", name:"冬瓜檸檬", price:45, desc:"清爽解膩", tags:["飲品"], capacityUnits:0 },
+  // 鍋物
+  { id:"臭臭鍋", name:"臭臭鍋", price:100, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"鴨血鍋", name:"鴨血鍋", price:90, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"泡菜鍋", name:"泡菜鍋", price:110, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE.filter(s=>s!=="無辣") },
+  { id:"什錦鍋", name:"什錦鍋", price:130, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"腸旺鍋", name:"腸旺鍋", price:130, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"牛雜鍋", name:"牛雜鍋", price:150, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  { id:"大腸鴨血鍋", name:"大腸鴨血鍋", price:140, desc:"", tags:["鍋物"], capacityUnits:1, spice:true, spiceOpts:SPICE },
+  // 主食
+  { id:"白飯", name:"白飯", price:10, desc:"", tags:["主食"], capacityUnits:0 },
+  { id:"冬粉", name:"冬粉", price:10, desc:"", tags:["主食"], capacityUnits:0 },
+  { id:"科學麵", name:"科學麵", price:15, desc:"", tags:["主食"], capacityUnits:0 },
+  // 單點
+  { id:"蟹肉棒", name:"蟹肉棒", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"鱈魚丸", name:"鱈魚丸", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"北海翅", name:"北海翅", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"鑫鑫腸", name:"鑫鑫腸", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"高麗菜(冬)", name:"高麗菜(冬)", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"金針菇", name:"金針菇", price:10, tags:["單點"], capacityUnits:0 },
+  { id:"臭豆腐", name:"臭豆腐", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"貢丸", name:"貢丸", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"魚餃", name:"魚餃", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"燕餃", name:"燕餃", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"黑輪", name:"黑輪", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"米血", name:"米血", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"鴨血", name:"鴨血", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"蝦球", name:"蝦球", price:20, tags:["單點"], capacityUnits:0 },
+  { id:"大腸", name:"大腸", price:50, tags:["單點"], capacityUnits:0 },
+  { id:"豆皮", name:"豆皮", price:30, tags:["單點"], capacityUnits:0 },
 ];
 
+/* ===== 狀態 & 工具 ===== */
 const el = s => document.querySelector(s);
-const state = { cart:{}, orders: loadOrders(), filter:{keyword:"", tag:""} };
+const state = { cart:{}, orders: loadOrders(), filter:{keyword:"",tag:""} };
 
 function saveOrders(){ localStorage.setItem("orders_v1", JSON.stringify(state.orders)); }
 function loadOrders(){ try{ return JSON.parse(localStorage.getItem("orders_v1"))||[] }catch{ return [] } }
@@ -183,35 +212,44 @@ function autoAssignSlot(dateStr, earliest){
   return null;
 }
 
+/* ===== UI：篩選與菜單 ===== */
 function initFilters(){
   const uniq=Array.from(new Set(MENU.flatMap(m=>m.tags))).sort();
   const sel=el("#tagSelect");
-  for(const t of uniq){ const o=document.createElement("option");o.value=t;o.textContent=t;sel.appendChild(o); }
-  sel.addEventListener("change",()=>{state.filter.tag=sel.value;renderMenu()});
-  el("#searchInput").addEventListener("input",e=>{state.filter.keyword=e.target.value.trim();renderMenu()});
+  for(const t of uniq){ const o=document.createElement("option"); o.value=t; o.textContent=t; sel.appendChild(o); }
+  el("#tagSelect").addEventListener("change",()=>{state.filter.tag=el("#tagSelect").value; renderMenu()});
+  el("#searchInput").addEventListener("input",e=>{state.filter.keyword=e.target.value.trim(); renderMenu()});
 }
 function renderMenu(){
   const root=el("#menuList"); root.innerHTML="";
   const q=state.filter.keyword.toLowerCase(), tag=state.filter.tag;
   const list=MENU.filter(m=>{
-    const hitQ=q ? (m.name.toLowerCase().includes(q)||m.desc.toLowerCase().includes(q)) : true;
+    const hitQ=q ? (m.name.toLowerCase().includes(q) || (m.desc||"").toLowerCase().includes(q)) : true;
     const hitT=tag ? m.tags.includes(tag) : true;
     return hitQ && hitT;
   });
   if(!list.length){ root.innerHTML=`<div class="text-slate-600">目前沒有符合的商品。</div>`; return; }
+
   for(const item of list){
     const card=document.createElement("div"); card.className="card bg-white p-4 flex flex-col";
+    const spiceHtml = item.spice
+      ? `<label class="text-sm text-slate-600 block mt-2">辣度</label>
+         <select class="spice mt-1 w-full rounded-xl border border-slate-300 px-3 py-2">
+           ${item.spiceOpts.map(s=>`<option value="${s}">${s}</option>`).join("")}
+         </select>` : "";
+
     card.innerHTML=`
       <div class="flex-1">
         <div class="flex items-start justify-between gap-3">
           <h3 class="text-lg font-semibold">${item.name}</h3>
           <div class="text-right font-semibold mono">${formatCurrency(item.price)}</div>
         </div>
-        <p class="text-slate-600 mt-1">${item.desc}</p>
+        ${item.desc?`<p class="text-slate-600 mt-1">${item.desc}</p>`:""}
         <div class="mt-2 flex flex-wrap gap-1">
           ${item.tags.map(t=>`<span class="badge text-xs px-2 py-1 bg-slate-100 text-slate-700 border border-slate-200">${t}</span>`).join("")}
-          ${item.capacityUnits>0?`<span class="badge text-xs px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200">火鍋等效 ${item.capacityUnits}</span>`:""}
+          ${item.capacityUnits>0?`<span class="badge text-xs px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200">火鍋等效 1</span>`:""}
         </div>
+        ${spiceHtml}
       </div>
       <div class="mt-4 flex items-center justify-between">
         <div class="text-sm text-slate-600">加入購物車數量</div>
@@ -222,15 +260,25 @@ function renderMenu(){
           <button class="add btn px-3 py-2 bg-slate-900 text-white hover:bg-slate-800">加入</button>
         </div>
       </div>`;
+
     const qty=card.querySelector(".qty");
     card.querySelector(".dec").addEventListener("click",()=>{qty.value=Math.max(1,parseInt(qty.value||"1")-1)});
     card.querySelector(".inc").addEventListener("click",()=>{qty.value=Math.max(1,parseInt(qty.value||"1")+1)});
-    card.querySelector(".add").addEventListener("click",()=>addToCart(item,parseInt(qty.value||"1")));
+    card.querySelector(".add").addEventListener("click",()=>{
+      const chosenSpice = item.spice ? card.querySelector(".spice").value : null;
+      addToCart(item, parseInt(qty.value||"1",10), chosenSpice);
+    });
     root.appendChild(card);
   }
 }
-function addToCart(item,qty){
-  if(!state.cart[item.id]) state.cart[item.id]={item,qty}; else state.cart[item.id].qty+=qty;
+
+/* ===== 購物車 ===== */
+function addToCart(item, qty, spice=null){
+  // 將不同辣度視為不同品項（id:名稱:辣度）
+  const key = spice ? `${item.id}:${spice}` : item.id;
+  const displayName = spice ? `${item.name}（${spice}）` : item.name;
+  if(!state.cart[key]) state.cart[key]={ item:{...item, name:displayName}, qty };
+  else state.cart[key].qty += qty;
   renderCart();
 }
 function renderCart(){
@@ -253,7 +301,7 @@ function renderCart(){
         </div>
         <button class="remove btn px-3 py-2 border border-slate-300 hover:bg-slate-100">移除</button>`;
       div.querySelector(".lineQty").addEventListener("input",e=>{row.qty=Math.max(1,parseInt(e.target.value||"1")); renderCart()});
-      div.querySelector(".remove").addEventListener("click",()=>{delete state.cart[row.item.id]; renderCart()});
+      div.querySelector(".remove").addEventListener("click",()=>{ for(const k in state.cart){ if(state.cart[k]===row){ delete state.cart[k]; break; } } renderCart();});
       root.appendChild(div);
     }
   }
@@ -263,6 +311,8 @@ function renderCart(){
   el("#cartDiscount").textContent="-"+formatCurrency(discount).slice(1);
   el("#cartTotal").textContent=formatCurrency(Math.max(0,subtotal-discount));
 }
+
+/* ===== 下單 ===== */
 function populateEarliestTimeOptions(){
   const dateStr=todayIsoDate(), sel=el("#earliestTime");
   for(const s of generateSlotsForDate(dateStr)){
@@ -270,15 +320,13 @@ function populateEarliestTimeOptions(){
     opt.value=label; opt.textContent=label; sel.appendChild(opt);
   }
 }
-
 function onSubmitOrder(e){
   e.preventDefault(); el("#formError").textContent="";
   if(!Object.values(state.cart).length){ el("#formError").textContent="購物車尚無商品。"; return; }
   const name=el("#customerName").value.trim(), phone=el("#customerPhone").value.trim();
   if(!name || !phone){ el("#formError").textContent="請完整填寫姓名與電話。"; return; }
 
-  const dateStr=todayIsoDate();
-  const now=new Date();
+  const dateStr=todayIsoDate(); const now=new Date();
   const earliestSel=el("#earliestTime").value;
   let earliest = earliestSel
     ? dateAtTime(dateStr, parseInt(earliestSel.slice(0,2),10), parseInt(earliestSel.slice(3),10))
@@ -290,7 +338,10 @@ function onSubmitOrder(e){
   const slot=autoAssignSlot(dateStr, earliest);
   if(!slot){ el("#formError").textContent="今日可用時段已滿，請改天或稍後再試。"; return; }
 
-  const items=Object.values(state.cart).map(r=>({id:r.item.id,name:r.item.name,price:r.item.price,qty:r.qty,capacityUnits:r.item.capacityUnits}));
+  const items=Object.values(state.cart).map(r=>({
+    id:r.item.id, name:r.item.name, price:r.item.price,
+    qty:r.qty, capacityUnits:r.item.capacityUnits
+  }));
   const capacityUnits=items.reduce((s,it)=>s+it.capacityUnits*it.qty,0);
   const subtotal=items.reduce((s,it)=>s+it.price*it.qty,0);
   const discount=subtotal>=STORE.discountThreshold?STORE.discountAmount:0;
@@ -306,15 +357,14 @@ function onSubmitOrder(e){
     createdAt:new Date().toISOString(),
     source:"web-customer",
   };
-
-  // 寫入 localStorage（示範）
   state.orders.push(order); saveOrders();
-  // 清空購物車顯示成功
+
   state.cart={}; renderCart();
   el("#assignedSlotText").textContent=`${order.date} ${slotKey(new Date(order.assignedSlot))}`;
   el("#successModal").classList.remove("hidden");
 }
 
+/* ===== 啟動 ===== */
 document.addEventListener("DOMContentLoaded",()=>{
   initFilters(); renderMenu(); renderCart(); populateEarliestTimeOptions();
   el("#year").textContent=new Date().getFullYear();
