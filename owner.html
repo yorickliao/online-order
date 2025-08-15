@@ -13,12 +13,10 @@
 <body class="bg-slate-50 text-slate-900">
 
 <script>
-// ===== 簡易 PIN（前端可見，僅防誤入；正式上線請用後端驗證或帳密）=====
-const OWNER_PIN = "326"; // 改成你的 PIN
+// 簡易 PIN（前端可見，僅防誤入）
+const OWNER_PIN = "326";
 const input = prompt("請輸入管理 PIN");
-if (input !== OWNER_PIN) {
-  alert("PIN 錯誤"); location.href = "index.html";
-}
+if (input !== OWNER_PIN) { alert("PIN 錯誤"); location.href = "index.html"; }
 </script>
 
 <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
@@ -80,15 +78,15 @@ if (input !== OWNER_PIN) {
   <div class="mx-auto container-slim px-4 py-6 text-sm text-slate-600">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>© <span id="year"></span> 326臭臭鍋</div>
-      <div class="text-slate-500">資料儲存於 Google Sheet（透過 Apps Script）</div>
+      <div class="text-slate-500">資料儲存於 Google Sheet（Apps Script）</div>
     </div>
   </div>
 </footer>
 
 <script>
-/* ===== API 端點與 Key（部署後必填） ===== */
-const ENDPOINT = 'https://script.google.com/macros/s/AKfycbycF73j0CR5HEpe4Rm5Zn1tQU9LS0Yq2dLlNmsXax2pd2C05DUGv1ZPlbksa7csCp5rsw/exec'; // ← 換成你的 Web App URL
-const API_KEY  = '326hotpot326'; // ← 與後端一致
+/* ===== API 端點與 Key ===== */
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbze9Zp_vmiZTwF_o-3WO6lY-oqo5aKGrc2Ow58s4DZOhXmHQwDptXvNoACdHTb9LMP3eA/exec';
+const API_KEY  = '326hotpot326';
 
 /* ===== 共用工具與設定 ===== */
 const STORE = { openHour:16, openMinute:30, closeHour:20, closeMinute:30, slotMinutes:15, slotCapacity:7 };
@@ -116,17 +114,16 @@ async function apiList(dateStr){
   url.searchParams.set('key', API_KEY);
   const res = await fetch(url.toString(), { method:'GET' });
   const json = await res.json();
-  if (!json.ok) throw new Error('list failed');
+  if (!json.ok) throw new Error('list_failed');
   return (json.orders||[]).sort((a,b)=>new Date(a.assignedSlot)-new Date(b.assignedSlot));
 }
 async function apiDelete(id){
   const res = await fetch(ENDPOINT, {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
     body: JSON.stringify({ apiKey: API_KEY, action:'delete', id })
   });
   const json = await res.json();
-  if (!json.ok) throw new Error('delete failed');
+  if (!json.ok) throw new Error('delete_failed');
   return json;
 }
 
@@ -185,7 +182,8 @@ async function reloadAndRender(){
 }
 
 function exportCsv(){
-  const list = showAll ? currentList : currentList.filter(o=>o.date === (el("#datePicker").value || todayIsoDate()));
+  const dateStr = el("#datePicker").value || todayIsoDate();
+  const list = showAll ? currentList : currentList.filter(o=>o.date === dateStr);
   const rows=[["訂單ID","日期","時段","姓名","電話","品項","火鍋等效","小計","折扣","總計","建立時間"]];
   for(const o of list){
     rows.push([
@@ -214,7 +212,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   el("#clearToday").addEventListener("click", async ()=>{
     if(!confirm("清空今日所有訂單？此動作無法還原。")) return;
     const today = todayIsoDate();
-    // 逐筆刪除今日（簡化版；資料量大建議後端做批次）
     const todayList = currentList.filter(o=>o.date===today);
     for (const o of todayList) { await apiDelete(o.id); }
     await reloadAndRender();
@@ -222,7 +219,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   dp.addEventListener("change", reloadAndRender);
 
   await reloadAndRender();
-  // 自動更新（每 2 秒）
   setInterval(reloadAndRender, 2000);
 });
 </script>
