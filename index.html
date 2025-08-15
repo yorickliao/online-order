@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>326臭臭鍋 線上點餐</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- 只用亮色，避免 iOS Safari 原生 select/input 黑底看不到字 -->
+  <!-- 僅亮色，避免 iOS 原生 select/input 黑底看不到字 -->
   <meta name="color-scheme" content="light">
   <style>
     .card{border-radius:1rem}.btn{border-radius:1rem}.badge{border-radius:999px}
@@ -151,7 +151,7 @@
 
     <div class="mt-6 flex items-center justify-between">
       <div class="text-lg">
-        目前小計：
+        小計：
         <span id="pmSubtotal" class="font-semibold mono">$0</span>
       </div>
       <button id="pmAdd" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">加入購物車</button>
@@ -214,19 +214,20 @@ const state = {
 const pad2 = n => String(n).padStart(2,'0');
 const money = n => '$' + Number(n||0).toLocaleString('zh-Hant');
 const todayIso = () => dayjs().tz().format('YYYY-MM-DD');
-function dateAt(dateStr, h, m){ return dayjs.tz(`${dateStr} ${pad2(h)}:${pad2(m)}`,'YYYY-MM-DD HH:mm', 'Asia/Taipei').toDate(); }
+function dateAt(dateStr, h, m){ return dayjs.tz(`${dateStr} ${pad2(h)}:${pad2(m)}`,'YYYY-MM-DD HH:mm','Asia/Taipei').toDate(); }
 function roundUpToSlot(d, minutes){ const ms=minutes*60*1000; return new Date(Math.ceil(d.getTime()/ms)*ms); }
 function slotKey(d){ return dayjs(d).tz().format('HH:mm'); }
 function generateSlots(dateStr){
-  const start = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`, 'YYYY-MM-DD HH:mm', 'Asia/Taipei');
-  const end   = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`, 'YYYY-MM-DD HH:mm', 'Asia/Taipei');
+  const start = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+  const end   = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
   const arr=[]; for(let t=start.clone(); t.isBefore(end); t=t.add(STORE.slotMinutes,'minute')) arr.push(t.toDate()); return arr;
 }
 
 /* ===== 渲染：火鍋 & 主食 ===== */
 function renderPots(){
-  const root = el('#potList'); root.innerHTML='';
-  for(const p of POTS){
+  const root = el('#potList'); if(!root) return;
+  root.innerHTML='';
+  POTS.forEach(p=>{
     const card = document.createElement('div');
     card.className = 'card bg-white p-4 flex flex-col';
     card.innerHTML = `
@@ -241,11 +242,12 @@ function renderPots(){
     `;
     card.querySelector('button').addEventListener('click', ()=> openPotModal(p));
     root.appendChild(card);
-  }
+  });
 }
 function renderSides(){
-  const root = el('#sideList'); root.innerHTML='';
-  for(const s of SIDES){
+  const root = el('#sideList'); if(!root) return;
+  root.innerHTML='';
+  SIDES.forEach(s=>{
     const row = document.createElement('div');
     row.className = 'card bg-white p-4 flex items-center justify-between gap-3';
     row.innerHTML = `
@@ -261,13 +263,11 @@ function renderSides(){
       </div>
     `;
     const qty = row.querySelector('.qty');
-    row.querySelector('.dec').addEventListener('click', ()=> qty.value = Math.max(1, (parseInt(qty.value)||1)-1));
-    row.querySelector('.inc').addEventListener('click', ()=> qty.value = Math.max(1, (parseInt(qty.value)||1)+1));
-    row.querySelector('.add').addEventListener('click', ()=>{
-      addSideToCart(s, parseInt(qty.value)||1);
-    });
+    row.querySelector('.dec').addEventListener('click', ()=> qty.value = Math.max(1,(parseInt(qty.value)||1)-1));
+    row.querySelector('.inc').addEventListener('click', ()=> qty.value = Math.max(1,(parseInt(qty.value)||1)+1));
+    row.querySelector('.add').addEventListener('click', ()=> addSideToCart(s, parseInt(qty.value)||1));
     root.appendChild(row);
-  }
+  });
 }
 
 /* ===== Modal：火鍋細項 ===== */
@@ -278,18 +278,15 @@ function openPotModal(pot){
   el('#pmPrice').textContent = money(pot.price);
   // 辣度
   const sp = el('#pmSpice'); sp.innerHTML='';
-  pot.spiceOpts.forEach(s => {
-    const o = document.createElement('option'); o.value=s; o.textContent=s; sp.appendChild(o);
-  });
+  pot.spiceOpts.forEach(s => { const o=document.createElement('option'); o.value=s; o.textContent=s; sp.appendChild(o); });
   // 數量/備註
-  el('#pmQty').value = 1;
-  el('#pmNote').value = '';
+  el('#pmQty').value = 1; el('#pmNote').value = '';
   // 單點
   const ex = el('#pmExtras'); ex.innerHTML='';
-  for(const e of EXTRAS){
-    const row = document.createElement('div');
-    row.className = 'flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2';
-    row.innerHTML = `
+  EXTRAS.forEach(e=>{
+    const row=document.createElement('div');
+    row.className='flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2';
+    row.innerHTML=`
       <div class="min-w-0">
         <div class="font-medium">${e.id}</div>
         <div class="text-xs text-slate-600 mono">${money(e.price)}</div>
@@ -298,14 +295,13 @@ function openPotModal(pot){
         <button class="dec btn px-2 py-1 border border-slate-300 hover:bg-slate-100">-</button>
         <input type="number" min="0" value="0" class="exQty w-16 text-center border border-slate-300 rounded-xl py-1 bg-white text-slate-900" />
         <button class="inc btn px-2 py-1 border border-slate-300 hover:bg-slate-100">+</button>
-      </div>
-    `;
+      </div>`;
     const qty = row.querySelector('.exQty');
-    row.querySelector('.dec').addEventListener('click', ()=> qty.value = Math.max(0, (parseInt(qty.value)||0)-1, 0));
-    row.querySelector('.inc').addEventListener('click', ()=> qty.value = Math.max(0, (parseInt(qty.value)||0)+1));
+    row.querySelector('.dec').addEventListener('click', ()=> qty.value = Math.max(0,(parseInt(qty.value)||0)-1));
+    row.querySelector('.inc').addEventListener('click', ()=> qty.value = Math.max(0,(parseInt(qty.value)||0)+1));
     qty.addEventListener('input', updatePmSubtotal);
     ex.appendChild(row);
-  }
+  });
   updatePmSubtotal();
   el('#potModal').classList.remove('hidden');
 }
@@ -314,75 +310,54 @@ function updatePmSubtotal(){
   if(!pmCurrent) return;
   const potQty = Math.max(1, parseInt(el('#pmQty').value)||1);
   let subtotal = pmCurrent.price * potQty;
-  el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{
-    const n = Math.max(0, parseInt(q.value)||0);
-    subtotal += EXTRAS[i].price * n;
-  });
+  el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{ subtotal += EXTRAS[i].price * Math.max(0,parseInt(q.value)||0); });
   el('#pmSubtotal').textContent = money(subtotal);
 }
 
-/* ===== 購物車邏輯 ===== */
-function addPotToCart(bundle){
-  state.cart.push({ type:'pot', ...bundle });
-  renderCart();
-  closePotModal();
-}
-function addSideToCart(side, qty){
-  state.cart.push({ type:'side', item:{ id:side.id, price:side.price, name:side.id }, qty });
-  renderCart();
-}
-function removeCartEntry(index){
-  state.cart.splice(index,1);
-  renderCart();
-}
+/* ===== 購物車 ===== */
+function addPotToCart(bundle){ state.cart.push({ type:'pot', ...bundle }); renderCart(); closePotModal(); }
+function addSideToCart(side, qty){ state.cart.push({ type:'side', item:{ id:side.id, price:side.price, name:side.id }, qty }); renderCart(); }
+function removeCartEntry(index){ state.cart.splice(index,1); renderCart(); }
 function cartTotal(){
-  let total = 0;
-  for(const e of state.cart){
+  return state.cart.reduce((sum,e)=>{
     if(e.type==='pot'){
-      total += e.pot.price * e.qty;
-      for(const x of e.extras) total += x.price * x.qty;
-    }else if(e.type==='side'){
-      total += e.item.price * e.qty;
+      const extras = e.extras.reduce((s,x)=> s + x.price*x.qty, 0);
+      return sum + e.pot.price*e.qty + extras;
+    } else {
+      return sum + e.item.price*e.qty;
     }
-  }
-  return total;
+  },0);
 }
 function renderCart(){
   const root = el('#cartItems'); root.innerHTML='';
-  if(state.cart.length===0){
-    root.innerHTML = '<div class="text-slate-500">購物車目前沒有商品。</div>';
-  }
+  if(state.cart.length===0){ root.innerHTML='<div class="text-slate-500">購物車目前沒有商品。</div>'; }
   state.cart.forEach((e, idx)=>{
-    const div = document.createElement('div');
+    const div=document.createElement('div');
     if(e.type==='pot'){
-      const extrasText = e.extras.filter(x=>x.qty>0).map(x=>`${x.id}×${x.qty}`).join('、');
+      const extrasText = e.extras.filter(x=>x.qty>0).map(x=>`${x.id}×${x.qty}`).join('、') || '(無單點)';
       const noteText = e.note ? `｜備註：${e.note}` : '';
-      const price = e.pot.price * e.qty + e.extras.reduce((s,x)=> s + x.price*x.qty, 0);
-      div.className = 'card bg-white p-4';
-      div.innerHTML = `
+      const price = e.pot.price*e.qty + e.extras.reduce((s,x)=> s + x.price*x.qty,0);
+      div.className='card bg-white p-4';
+      div.innerHTML=`
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="font-medium">${e.pot.name}（${e.spice}） ×
               <input type="number" min="1" value="${e.qty}" class="lineQty w-16 text-center border border-slate-300 rounded-lg py-1 mx-1 bg-white text-slate-900">
             </div>
-            <div class="text-sm text-slate-700 mt-1 break-words">${extrasText || '(無單點)'}</div>
-            ${e.note ? `<div class="text-xs text-slate-500 mt-1">${noteText}</div>` : ''}
-            <div class="text-xs text-slate-500 mt-1">等效：${e.pot.capacityUnits*e.qty}</div>
+            <div class="text-sm text-slate-700 mt-1 break-words">${extrasText}</div>
+            ${e.note?`<div class="text-xs text-slate-500 mt-1">${noteText}</div>`:''}
           </div>
           <div class="shrink-0 text-right">
             <div class="font-semibold mono">${money(price)}</div>
             <button class="remove btn mt-2 px-3 py-2 border border-slate-300 hover:bg-slate-100">移除</button>
           </div>
-        </div>
-      `;
-      div.querySelector('.lineQty').addEventListener('input', ev=>{
-        let v = parseInt(ev.target.value)||1; if(v<1) v=1; e.qty=v; renderCart();
-      });
+        </div>`;
+      div.querySelector('.lineQty').addEventListener('input', ev=>{ let v=parseInt(ev.target.value)||1; if(v<1)v=1; e.qty=v; renderCart(); });
       div.querySelector('.remove').addEventListener('click', ()=> removeCartEntry(idx));
     }else{
-      const price = e.item.price * e.qty;
-      div.className = 'card bg-white p-4 flex items-center justify-between gap-3';
-      div.innerHTML = `
+      const price = e.item.price*e.qty;
+      div.className='card bg-white p-4 flex items-center justify-between gap-3';
+      div.innerHTML=`
         <div class="min-w-0">
           <div class="font-medium">${e.item.name}</div>
           <div class="text-sm text-slate-600">
@@ -391,11 +366,8 @@ function renderCart(){
             = <span class="mono">${money(price)}</span>
           </div>
         </div>
-        <button class="remove btn px-3 py-2 border border-slate-300 hover:bg-slate-100">移除</button>
-      `;
-      div.querySelector('.lineQty').addEventListener('input', ev=>{
-        let v = parseInt(ev.target.value)||1; if(v<1) v=1; e.qty=v; renderCart();
-      });
+        <button class="remove btn px-3 py-2 border border-slate-300 hover:bg-slate-100">移除</button>`;
+      div.querySelector('.lineQty').addEventListener('input', ev=>{ let v=parseInt(ev.target.value)||1; if(v<1)v=1; e.qty=v; renderCart(); });
       div.querySelector('.remove').addEventListener('click', ()=> removeCartEntry(idx));
     }
     root.appendChild(div);
@@ -421,11 +393,9 @@ async function apiCreate(order){
 
 /* ===== 訂位計算 ===== */
 function bookedCapacityMap(dateStr){
-  const map={}; for(const o of state.ordersCache.filter(o=>o.date===dateStr)){ const k=slotKey(new Date(o.assignedSlot)); map[k]=(map[k]||0)+(o.capacityUnits||0); } return map;
+  const map={}; (state.ordersCache||[]).filter(o=>o.date===dateStr).forEach(o=>{ const k=slotKey(new Date(o.assignedSlot)); map[k]=(map[k]||0)+(o.capacityUnits||0); }); return map;
 }
-function cartCapacityUnits(){
-  let n=0; for(const e of state.cart){ if(e.type==='pot') n += (e.pot.capacityUnits*e.qty); } return n;
-}
+function cartCapacityUnits(){ return state.cart.reduce((n,e)=> e.type==='pot' ? n + e.pot.capacityUnits*e.qty : n, 0); }
 function autoAssignSlot(dateStr, earliest){
   const booked=bookedCapacityMap(dateStr);
   for(const s of generateSlots(dateStr)){
@@ -452,16 +422,16 @@ async function onSubmitOrder(e){
     if(!name || !phone){ showErr('請完整填寫姓名與電話。'); return; }
 
     let dateStr = todayIso();
-    const openToday  = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`, 'YYYY-MM-DD HH:mm', 'Asia/Taipei');
-    const closeToday = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`, 'YYYY-MM-DD HH:mm', 'Asia/Taipei');
+    const openToday  = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+    const closeToday = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
 
     const sel = el('#earliestTime').value;
     let earliest;
-    if (sel) earliest = dayjs.tz(`${dateStr} ${sel}`, 'YYYY-MM-DD HH:mm', 'Asia/Taipei');
+    if (sel) earliest = dayjs.tz(`${dateStr} ${sel}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
     else {
       const candidate = dayjs().tz().add(STORE.prepBufferMinutes,'minute');
       if (candidate.isBefore(openToday)) earliest = openToday;
-      else if (candidate.isAfter(closeToday)) { dateStr = dayjs.tz(dateStr,'YYYY-MM-DD','Asia/Taipei').add(1,'day').format('YYYY-MM-DD'); earliest = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`, 'YYYY-MM-DD HH:mm', 'Asia/Taipei'); }
+      else if (candidate.isAfter(closeToday)) { dateStr = dayjs.tz(dateStr,'YYYY-MM-DD','Asia/Taipei').add(1,'day').format('YYYY-MM-DD'); earliest = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei'); }
       else earliest = candidate;
     }
     const rounded = roundUpToSlot(earliest.toDate(), STORE.slotMinutes);
@@ -479,17 +449,15 @@ async function onSubmitOrder(e){
 
     // 組訂單項目
     const items = [];
-    for(const e of state.cart){
+    state.cart.forEach(e=>{
       if(e.type==='pot'){
         const nameWith = `${e.pot.name}（${e.spice}）` + (e.note?`｜備註：${e.note}`:'');
         items.push({ id:e.pot.id, name:nameWith, price:e.pot.price, qty:e.qty, capacityUnits:e.pot.capacityUnits });
-        for(const x of e.extras.filter(x=>x.qty>0)){
-          items.push({ id:x.id, name:x.id, price:x.price, qty:x.qty, capacityUnits:0 });
-        }
+        e.extras.filter(x=>x.qty>0).forEach(x=> items.push({ id:x.id, name:x.id, price:x.price, qty:x.qty, capacityUnits:0 }));
       }else{
         items.push({ id:e.item.id, name:e.item.name, price:e.item.price, qty:e.qty, capacityUnits:0 });
       }
-    }
+    });
     const subtotal = items.reduce((s,it)=> s + it.price*it.qty, 0);
     const order = {
       id: 'O'+Date.now(),
@@ -510,53 +478,56 @@ async function onSubmitOrder(e){
   }catch(err){
     console.error('submit_failed', err);
     const m = String(err && err.message || '');
-    if (m.includes('timeout')) showErr('連線逾時，請再試一次。');
-    else if (m.startsWith('bad_json')) showErr('伺服器回應格式異常：' + m.slice(8));
-    else if (m.includes('server:unauthorized')) showErr('伺服器拒絕：金鑰或權限不符。');
-    else if (m.startsWith('server:exception')) showErr('伺服器內部錯誤：' + m.replace(/^server:/,''));
-    else showErr('送單失敗：' + m.replace(/^server:/,''));
+    if (m.includes('timeout')) el('#formError').textContent='連線逾時，請再試一次。';
+    else if (m.startsWith('bad_json')) el('#formError').textContent='伺服器回應格式異常：' + m.slice(8);
+    else if (m.includes('server:unauthorized')) el('#formError').textContent='伺服器拒絕：金鑰或權限不符。';
+    else if (m.startsWith('server:exception')) el('#formError').textContent='伺服器內部錯誤：' + m.replace(/^server:/,'');
+    else el('#formError').textContent='送單失敗：' + m.replace(/^server:/,'');
   }finally{ setBusy(false); }
-
-  function setBusy(b){ submitBtn.disabled=b; submitBtn.textContent = b ? '送出中…' : '送出訂單'; }
 }
 
 /* ===== 取餐時段選單 ===== */
 function populateEarliestTimeOptions(){
   const sel = el('#earliestTime'); const dateStr = todayIso();
   sel.innerHTML = '<option value="">不指定（系統自動安排）</option>';
-  const slots = generateSlots(dateStr);
-  for(const s of slots){
-    const label = slotKey(s);
-    const o = document.createElement('option'); o.value=label; o.textContent=label; sel.appendChild(o);
-  }
+  generateSlots(dateStr).forEach(s=>{
+    const label = slotKey(s); const o=document.createElement('option'); o.value=label; o.textContent=label; sel.appendChild(o);
+  });
 }
 
 /* ===== 啟動 ===== */
 document.addEventListener('DOMContentLoaded', async ()=>{
-  renderPots(); renderSides(); renderCart(); populateEarliestTimeOptions();
-  el('#year').textContent = new Date().getFullYear();
+  try{
+    renderPots();
+    renderSides();
+    renderCart();
+    populateEarliestTimeOptions();
+    el('#year').textContent = new Date().getFullYear();
 
-  // Modal 互動
-  el('#pmDec').addEventListener('click', ()=>{ const q=el('#pmQty'); q.value=Math.max(1,(parseInt(q.value)||1)-1); updatePmSubtotal(); });
-  el('#pmInc').addEventListener('click', ()=>{ const q=el('#pmQty'); q.value=Math.max(1,(parseInt(q.value)||1)+1); updatePmSubtotal(); });
-  el('#pmQty').addEventListener('input', updatePmSubtotal);
-  el('#pmClose').addEventListener('click', closePotModal);
-  el('#pmAdd').addEventListener('click', ()=>{
-    const qty = Math.max(1, parseInt(el('#pmQty').value)||1);
-    const spice = el('#pmSpice').value;
-    const note = el('#pmNote').value.trim();
-    const extras = [];
-    el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{
-      const n = Math.max(0, parseInt(q.value)||0);
-      if(n>0) extras.push({ id:EXTRAS[i].id, price:EXTRAS[i].price, qty:n });
+    // Modal 互動
+    el('#pmDec').addEventListener('click', ()=>{ const q=el('#pmQty'); q.value=Math.max(1,(parseInt(q.value)||1)-1); updatePmSubtotal(); });
+    el('#pmInc').addEventListener('click', ()=>{ const q=el('#pmQty'); q.value=Math.max(1,(parseInt(q.value)||1)+1); updatePmSubtotal(); });
+    el('#pmQty').addEventListener('input', updatePmSubtotal);
+    el('#pmClose').addEventListener('click', closePotModal);
+    el('#pmAdd').addEventListener('click', ()=>{
+      const qty = Math.max(1, parseInt(el('#pmQty').value)||1);
+      const spice = el('#pmSpice').value;
+      const note = el('#pmNote').value.trim();
+      const extras = []; el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{ const n=Math.max(0,parseInt(q.value)||0); if(n>0) extras.push({ id:EXTRAS[i].id, price:EXTRAS[i].price, qty:n }); });
+      addPotToCart({ pot: pmCurrent, spice, qty, note, extras });
     });
-    addPotToCart({ pot: pmCurrent, spice, qty, note, extras });
-  });
 
-  try{ state.ordersCache = await apiList(todayIso()); }catch(_){}
-  el('#clearCart').addEventListener('click', ()=>{ state.cart=[]; renderCart(); });
-  el('#checkoutForm').addEventListener('submit', onSubmitOrder);
-  el('#closeSuccess').addEventListener('click', ()=> el('#successModal').classList.add('hidden'));
+    try{ state.ordersCache = await apiList(todayIso()); }catch(_){}
+    el('#clearCart').addEventListener('click', ()=>{ state.cart=[]; renderCart(); });
+    el('#checkoutForm').addEventListener('submit', onSubmitOrder);
+    el('#closeSuccess').addEventListener('click', ()=> el('#successModal').classList.add('hidden'));
+  }catch(err){
+    console.error('init_failed', err);
+    const warn = document.createElement('div');
+    warn.className='mx-auto container-slim px-4';
+    warn.innerHTML = `<div class="card bg-red-50 border border-red-200 text-red-800 p-4 mt-4">初始化失敗：${String(err&&err.message||err)}</div>`;
+    document.body.prepend(warn);
+  }
 });
 </script>
 </body>
