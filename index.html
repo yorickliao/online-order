@@ -10,6 +10,17 @@
     .card{border-radius:1rem}.btn{border-radius:1rem}.badge{border-radius:999px}
     .container-slim{max-width:1200px}.mono{font-variant-numeric:tabular-nums}
   </style>
+
+  <!-- 固定以台北時區計算與顯示 -->
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
+  <script>
+    dayjs.extend(dayjs_plugin_utc);
+    dayjs.extend(dayjs_plugin_timezone);
+    const STORE_TZ = 'Asia/Taipei';
+    dayjs.tz.setDefault(STORE_TZ);
+  </script>
 </head>
 <body class="bg-slate-50 text-slate-900">
 <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
@@ -162,34 +173,25 @@ const MENU = [
   { id:"豆皮", name:"豆皮", price:30, tags:["單點"], capacityUnits:0 },
 ];
 
-/* ===== 狀態 & 工具 ===== */
+/* ===== 狀態 & 工具（台北時區版） ===== */
 const el = s => document.querySelector(s);
 const state = { cart:{}, filter:{keyword:"",tag:""}, ordersCache:[] };
 
 function pad2(n){return n.toString().padStart(2,"0")}
 function formatCurrency(n){return " $" + n.toLocaleString("zh-Hant")}
-function todayIsoDate(){const d=new Date();return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`}
-function dateAtTime(dateStr,hh,mm){const d=new Date(dateStr+"T00:00:00");d.setHours(hh,mm,0,0);return d;}
+function todayIsoDate(){ return dayjs().tz().format('YYYY-MM-DD'); }
+function dateAtTime(dateStr,hh,mm){
+  return dayjs.tz(`${dateStr} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm').toDate();
+}
 function roundUpToSlot(d, minutes){const ms=minutes*60*1000;return new Date(Math.ceil(d.getTime()/ms)*ms)}
-function slotKey(d){return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`}
+function slotKey(d){return dayjs(d).tz().format('HH:mm')}
 function generateSlotsForDate(dateStr){
-  const start=dateAtTime(dateStr,STORE.openHour,STORE.openMinute);
-  const end=dateAtTime(dateStr,STORE.closeHour,STORE.closeMinute);
-  const step=STORE.slotMinutes*60*1000, arr=[];
-  for(let t=start.getTime(); t<end.getTime(); t+=step){ arr.push(new Date(t)) }
-  return arr;
+  const start = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
+  const end   = dayjs.tz(`${dateStr} ${String(STORE.closeHour).padStart(2,'0')}:${String(STORE.closeMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
+  const arr=[]; for(let t=start.clone(); t.isBefore(end); t=t.add(STORE.slotMinutes,'minute')) arr.push(t.toDate()); return arr;
 }
-function addDaysIso(dateStr, days){
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function cartTotalQty(){
-  return Object.values(state.cart).reduce((s,row)=>{
-    const q = parseInt(row?.qty ?? 0, 10);
-    return s + (Number.isFinite(q) && q > 0 ? q : 0);
-  }, 0);
-}
+function addDaysIso(dateStr, days){ return dayjs.tz(dateStr,'YYYY-MM-DD').add(days,'day').format('YYYY-MM-DD'); }
+function cartTotalQty(){ return Object.values(state.cart).reduce((s,row)=> s + Math.max(0, parseInt(row?.qty||0,10)||0), 0); }
 
 async function apiList(dateStr){
   const url = new URL(ENDPOINT);
@@ -363,30 +365,27 @@ async function onSubmitOrder(e){
   if (!name || !phone) return fail("請完整填寫姓名與電話。");
 
   let dateStr = todayIsoDate();
-  const openToday = dateAtTime(dateStr, STORE.openHour, STORE.openMinute);
-  const closeToday = dateAtTime(dateStr, STORE.closeHour, STORE.closeMinute);
+  const openToday  = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
+  const closeToday = dayjs.tz(`${dateStr} ${String(STORE.closeHour).padStart(2,'0')}:${String(STORE.closeMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
 
   const earliestSel = el("#earliestTime").value;
   let earliest;
 
   if (earliestSel) {
-    earliest = dateAtTime(dateStr,
-      parseInt(earliestSel.slice(0,2),10),
-      parseInt(earliestSel.slice(3),10)
-    );
+    earliest = dayjs.tz(`${dateStr} ${earliestSel}`, 'YYYY-MM-DD HH:mm');
   } else {
-    const candidate = new Date(Date.now() + STORE.prepBufferMinutes * 60 * 1000);
-    if (candidate < openToday) {
+    const candidate = dayjs().tz().add(STORE.prepBufferMinutes, 'minute');
+    if (candidate.isBefore(openToday)) {
       earliest = openToday;
-    } else if (candidate > closeToday) {
-      dateStr = addDaysIso(dateStr, 1);
-      earliest = dateAtTime(dateStr, STORE.openHour, STORE.openMinute);
+    } else if (candidate.isAfter(closeToday)) {
+      dateStr = dayjs.tz(dateStr,'YYYY-MM-DD').add(1,'day').format('YYYY-MM-DD');
+      earliest = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
     } else {
       earliest = candidate;
     }
   }
 
-  earliest = roundUpToSlot(earliest, STORE.slotMinutes);
+  const rounded = roundUpToSlot(earliest.toDate(), STORE.slotMinutes);
 
   try {
     state.ordersCache = await apiList(dateStr);
@@ -395,7 +394,7 @@ async function onSubmitOrder(e){
     return fail("讀取目前訂單失敗，請稍後再試。");
   }
 
-  let slot = autoAssignSlot(dateStr, earliest);
+  let slot = autoAssignSlot(dateStr, rounded);
   if (!slot) {
     const tmr = addDaysIso(dateStr, 1);
     try { state.ordersCache = await apiList(tmr); } catch(_){}
@@ -429,7 +428,7 @@ async function onSubmitOrder(e){
     const ret = await apiCreate(order);
     console.log('create ok', ret);
     state.cart = {}; renderCart();
-    el("#assignedSlotText").textContent = `${order.date} ${slotKey(new Date(order.assignedSlot))}`;
+    el("#assignedSlotText").textContent = dayjs(order.assignedSlot).tz().format('YYYY-MM-DD HH:mm');
     el("#successModal").classList.remove("hidden");
   } catch (err) {
     console.error('create failed', err);
@@ -447,7 +446,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   el("#checkoutForm").addEventListener("submit", onSubmitOrder);
   el("#clearCart").addEventListener("click",()=>{state.cart={}; renderCart()});
   el("#closeSuccess").addEventListener("click",()=>el("#successModal").classList.add("hidden"));
-  // 初次載入抓一次今天訂單（避免超賣）
   try { state.ordersCache = await apiList(todayIsoDate()); } catch(_){}
 });
 </script>
