@@ -81,7 +81,7 @@
           <select id="earliestTime" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2">
             <option value="">不指定（系統自動安排）</option>
           </select>
-          <p class="text-xs text-slate-500 mt-1">未選時，系統會從「現在 + 準備緩衝」開始排。</p>
+          <p class="text-xs text-slate-500 mt-1">未選時，系統會從「現在 + 準備緩衝」開始排；若已打烊，會自動排隔天第一個時段。</p>
         </div>
         <div class="bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm">
           每 15 分鐘一個時段；每時段上限 7 鍋（火鍋等效單位）
@@ -115,9 +115,9 @@
 </footer>
 
 <script>
-/* ===== API 端點與 Key（部署後必填） ===== */
-const ENDPOINT = 'https://script.google.com/macros/s/AKfycbycF73j0CR5HEpe4Rm5Zn1tQU9LS0Yq2dLlNmsXax2pd2C05DUGv1ZPlbksa7csCp5rsw/exec'; // ← 換成你的 Web App URL
-const API_KEY  = '326hotpot326'; // ← 與後端一致
+/* ===== API 端點與 Key ===== */
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbze9Zp_vmiZTwF_o-3WO6lY-oqo5aKGrc2Ow58s4DZOhXmHQwDptXvNoACdHTb9LMP3eA/exec';
+const API_KEY  = '326hotpot326';
 
 /* ===== 設定 ===== */
 const STORE = {
@@ -179,22 +179,32 @@ function generateSlotsForDate(dateStr){
   for(let t=start.getTime(); t<end.getTime(); t+=step){ arr.push(new Date(t)) }
   return arr;
 }
+function addDaysIso(dateStr, days){
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function cartTotalQty(){
+  return Object.values(state.cart).reduce((s,row)=>{
+    const q = parseInt(row?.qty ?? 0, 10);
+    return s + (Number.isFinite(q) && q > 0 ? q : 0);
+  }, 0);
+}
 
 async function apiList(dateStr){
   const url = new URL(ENDPOINT);
   url.searchParams.set('action','list');
   if (dateStr) url.searchParams.set('date', dateStr);
-  url.searchParams.set('key', API_KEY); // 傳 key（簡易）
+  url.searchParams.set('key', API_KEY);
   const res = await fetch(url.toString(), { method:'GET' });
   const json = await res.json();
-  if (!json.ok) throw new Error('list failed');
+  if (!json.ok) throw new Error('list_failed');
   return json.orders || [];
 }
 async function apiCreate(order){
   const res = await fetch(ENDPOINT, {
-    method: 'POST',
-    // 不要加 headers.Content-Type；Apps Script 可直接讀 JSON 字串
-    body: JSON.stringify({ apiKey: API_KEY, action: 'create', order })
+    method:'POST',
+    body: JSON.stringify({ apiKey: API_KEY, action:'create', order })
   });
   const json = await res.json();
   if (!json.ok) throw new Error(json.error || 'create_failed');
@@ -310,8 +320,15 @@ function renderCart(){
           </div>
         </div>
         <button class="remove btn px-3 py-2 border border-slate-300 hover:bg-slate-100">移除</button>`;
-      div.querySelector(".lineQty").addEventListener("input",e=>{row.qty=Math.max(1,parseInt(e.target.value||"1")); renderCart()});
-      div.querySelector(".remove").addEventListener("click",()=>{ for(const k in state.cart){ if(state.cart[k]===row){ delete state.cart[k]; break; } } renderCart();});
+      div.querySelector(".lineQty").addEventListener("input",e=>{
+        let v = parseInt(e.target.value || "1", 10);
+        if (!Number.isFinite(v) || v < 1) v = 1;
+        row.qty = v; renderCart();
+      });
+      div.querySelector(".remove").addEventListener("click",()=>{
+        for(const k in state.cart){ if(state.cart[k]===row){ delete state.cart[k]; break; } }
+        renderCart();
+      });
       root.appendChild(div);
     }
   }
@@ -322,7 +339,7 @@ function renderCart(){
   el("#cartTotal").textContent=formatCurrency(Math.max(0,subtotal-discount));
 }
 
-/* ===== 下單流程（改用後端） ===== */
+/* ===== 取餐時段／下單 ===== */
 function populateEarliestTimeOptions(){
   const dateStr=todayIsoDate(), sel=el("#earliestTime");
   for(const s of generateSlotsForDate(dateStr)){
@@ -331,68 +348,107 @@ function populateEarliestTimeOptions(){
   }
 }
 
-async function refreshTodayOrders(){
-  const dateStr=todayIsoDate();
-  state.ordersCache = await apiList(dateStr);
-}
-
 async function onSubmitOrder(e){
-  e.preventDefault(); el("#formError").textContent="";
-  if(!Object.values(state.cart).length){ el("#formError").textContent="購物車尚無商品。"; return; }
-  const name=el("#customerName").value.trim(), phone=el("#customerPhone").value.trim();
-  if(!name || !phone){ el("#formError").textContent="請完整填寫姓名與電話。"; return; }
+  e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true; submitBtn.textContent = '送出中…';
+  const fail = (msg) => { el("#formError").textContent = msg; submitBtn.disabled = false; submitBtn.textContent = '送出訂單'; };
 
-  const dateStr=todayIsoDate(); const now=new Date();
-  const earliestSel=el("#earliestTime").value;
-  let earliest = earliestSel
-    ? dateAtTime(dateStr, parseInt(earliestSel.slice(0,2),10), parseInt(earliestSel.slice(3),10))
-    : new Date(now.getTime() + STORE.prepBufferMinutes*60*1000);
+  el("#formError").textContent = "";
+
+  if (cartTotalQty() === 0) return fail("購物車尚無商品。");
+
+  const name = el("#customerName").value.trim();
+  const phone = el("#customerPhone").value.trim();
+  if (!name || !phone) return fail("請完整填寫姓名與電話。");
+
+  let dateStr = todayIsoDate();
+  const openToday = dateAtTime(dateStr, STORE.openHour, STORE.openMinute);
+  const closeToday = dateAtTime(dateStr, STORE.closeHour, STORE.closeMinute);
+
+  const earliestSel = el("#earliestTime").value;
+  let earliest;
+
+  if (earliestSel) {
+    earliest = dateAtTime(dateStr,
+      parseInt(earliestSel.slice(0,2),10),
+      parseInt(earliestSel.slice(3),10)
+    );
+  } else {
+    const candidate = new Date(Date.now() + STORE.prepBufferMinutes * 60 * 1000);
+    if (candidate < openToday) {
+      earliest = openToday;
+    } else if (candidate > closeToday) {
+      dateStr = addDaysIso(dateStr, 1);
+      earliest = dateAtTime(dateStr, STORE.openHour, STORE.openMinute);
+    } else {
+      earliest = candidate;
+    }
+  }
+
   earliest = roundUpToSlot(earliest, STORE.slotMinutes);
-  const openAt = dateAtTime(dateStr, STORE.openHour, STORE.openMinute);
-  if(earliest.getTime()<openAt.getTime()) earliest=openAt;
 
-  // 先抓最新訂單再分配，避免超賣
-  await refreshTodayOrders();
-  const slot = autoAssignSlot(dateStr, earliest);
-  if(!slot){ el("#formError").textContent="今日可用時段已滿，請改天或稍後再試。"; return; }
+  try {
+    state.ordersCache = await apiList(dateStr);
+  } catch (err) {
+    console.error('list failed', err);
+    return fail("讀取目前訂單失敗，請稍後再試。");
+  }
 
-  const items=Object.values(state.cart).map(r=>({
+  let slot = autoAssignSlot(dateStr, earliest);
+  if (!slot) {
+    const tmr = addDaysIso(dateStr, 1);
+    try { state.ordersCache = await apiList(tmr); } catch(_){}
+    const tmrOpen = dateAtTime(tmr, STORE.openHour, STORE.openMinute);
+    slot = autoAssignSlot(tmr, tmrOpen);
+    if (slot) dateStr = tmr;
+  }
+  if (!slot) return fail("近期可用時段已滿，請改天或來電訂餐。");
+
+  const items = Object.values(state.cart).map(r=>({
     id:r.item.id, name:r.item.name, price:r.item.price,
     qty:r.qty, capacityUnits:r.item.capacityUnits
   }));
-  const capacityUnits=items.reduce((s,it)=>s+it.capacityUnits*it.qty,0);
-  const subtotal=items.reduce((s,it)=>s+it.price*it.qty,0);
-  const discount=subtotal>=STORE.discountThreshold?STORE.discountAmount:0;
-  const total=Math.max(0, subtotal-discount);
+  const capacityUnits = items.reduce((s,it)=>s+it.capacityUnits*it.qty,0);
+  const subtotal = items.reduce((s,it)=>s+it.price*it.qty,0);
+  const discount = subtotal >= STORE.discountThreshold ? STORE.discountAmount : 0;
+  const total = Math.max(0, subtotal - discount);
 
-  const order={
+  const order = {
     id:"O"+Date.now(),
-    date:dateStr,
-    assignedSlot:slot.toISOString(),
+    date: dateStr,
+    assignedSlot: slot.toISOString(),
     capacityUnits,
-    customer:{name,phone},
+    customer:{ name, phone },
     items, subtotal, discount, total,
-    createdAt:new Date().toISOString(),
+    createdAt: new Date().toISOString(),
     source:"web-customer",
   };
 
-  try{
-    await apiCreate(order);
-    state.cart={}; renderCart();
-    el("#assignedSlotText").textContent=`${order.date} ${slotKey(new Date(order.assignedSlot))}`;
+  try {
+    const ret = await apiCreate(order);
+    console.log('create ok', ret);
+    state.cart = {}; renderCart();
+    el("#assignedSlotText").textContent = `${order.date} ${slotKey(new Date(order.assignedSlot))}`;
     el("#successModal").classList.remove("hidden");
-  }catch(err){
-    el("#formError").textContent="送單失敗，請稍後再試。";
+  } catch (err) {
+    console.error('create failed', err);
+    fail(err.message === 'empty_order' ? '購物車尚無商品，無法送出。' : '送單失敗，請稍後再試。');
+    return;
   }
+
+  submitBtn.disabled = false; submitBtn.textContent = '送出訂單';
 }
 
+/* ===== 啟動 ===== */
 document.addEventListener("DOMContentLoaded", async ()=>{
   initFilters(); renderMenu(); renderCart(); populateEarliestTimeOptions();
   el("#year").textContent=new Date().getFullYear();
   el("#checkoutForm").addEventListener("submit", onSubmitOrder);
   el("#clearCart").addEventListener("click",()=>{state.cart={}; renderCart()});
   el("#closeSuccess").addEventListener("click",()=>el("#successModal").classList.add("hidden"));
-  await refreshTodayOrders(); // 頁面載入先抓一次，讓占用條件更準
+  // 初次載入抓一次今天訂單（避免超賣）
+  try { state.ordersCache = await apiList(todayIsoDate()); } catch(_){}
 });
 </script>
 </body>
