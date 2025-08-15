@@ -13,13 +13,11 @@
 <body class="bg-slate-50 text-slate-900">
 
 <script>
-// ===== 簡易密碼（PIN）設定 =====
-const OWNER_PIN = "326hotpot"; // 這裡改你的 PIN
+// ===== 簡易 PIN（前端可見，僅防誤入；正式上線請用後端驗證或帳密）=====
+const OWNER_PIN = "326"; // 改成你的 PIN
 const input = prompt("請輸入管理 PIN");
 if (input !== OWNER_PIN) {
-  alert("PIN 錯誤");
-  // 導回客人頁（若同目錄有 index.html）
-  location.href = "index.html";
+  alert("PIN 錯誤"); location.href = "index.html";
 }
 </script>
 
@@ -29,10 +27,12 @@ if (input !== OWNER_PIN) {
       <div class="w-10 h-10 bg-slate-900 text-white rounded-xl grid place-items-center text-lg font-bold select-none">管</div>
       <div>
         <div class="text-xl font-semibold">326臭臭鍋 訂單管理</div>
-        <div class="text-xs text-slate-500">營業時間 16:30–20:30 ・ 每 15 分鐘上限 7 鍋</div>
+        <div class="text-xs text-slate-500">16:30–20:30 ・ 每 15 分鐘上限 7 鍋</div>
       </div>
     </div>
     <div class="flex items-center gap-2">
+      <input id="datePicker" type="date" class="px-3 py-2 border border-slate-300 rounded-lg">
+      <button id="toggleAll" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">顯示全部</button>
       <button id="exportCsv" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">匯出 CSV</button>
       <button id="clearToday" class="btn px-3 py-2 bg-red-600 text-white hover:bg-red-700">清空今日</button>
     </div>
@@ -46,22 +46,16 @@ if (input !== OWNER_PIN) {
       <div id="slotSummary" class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm"></div>
     </div>
     <div class="card bg-white p-5 mt-6">
-      <h2 class="text-lg font-semibold mb-2">今日統計</h2>
-      <div class="flex items-center justify-between py-1">
-        <div class="text-slate-600">訂單數</div><div id="statOrders" class="mono font-semibold">0</div>
-      </div>
-      <div class="flex items-center justify-between py-1">
-        <div class="text-slate-600">總鍋數（等效）</div><div id="statCapacity" class="mono font-semibold">0</div>
-      </div>
-      <div class="flex items-center justify-between py-1">
-        <div class="text-slate-600">營業額</div><div id="statRevenue" class="mono font-semibold">$0</div>
-      </div>
+      <h2 class="text-lg font-semibold mb-2">統計</h2>
+      <div class="flex items-center justify-between py-1"><div class="text-slate-600">訂單數</div><div id="statOrders" class="mono font-semibold">0</div></div>
+      <div class="flex items-center justify-between py-1"><div class="text-slate-600">總鍋數（等效）</div><div id="statCapacity" class="mono font-semibold">0</div></div>
+      <div class="flex items-center justify-between py-1"><div class="text-slate-600">營業額</div><div id="statRevenue" class="mono font-semibold">$0</div></div>
     </div>
   </section>
 
   <section class="lg:col-span-2">
     <div class="card bg-white p-5">
-      <h2 class="text-lg font-semibold mb-4">今日訂單</h2>
+      <h2 class="text-lg font-semibold mb-4">訂單列表</h2>
       <div class="overflow-auto">
         <table class="w-full text-sm border border-slate-200">
           <thead class="bg-slate-50">
@@ -86,15 +80,22 @@ if (input !== OWNER_PIN) {
   <div class="mx-auto container-slim px-4 py-6 text-sm text-slate-600">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>© <span id="year"></span> 326臭臭鍋</div>
-      <div class="text-slate-500">本頁示範用途，資料來自瀏覽器 localStorage</div>
+      <div class="text-slate-500">資料儲存於 Google Sheet（透過 Apps Script）</div>
     </div>
   </div>
 </footer>
 
 <script>
+/* ===== API 端點與 Key（部署後必填） ===== */
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbze9Zp_vmiZTwF_o-3WO6lY-oqo5aKGrc2Ow58s4DZOhXmHQwDptXvNoACdHTb9LMP3eA/exec'; // ← 換成你的 Web App URL
+const API_KEY  = '326hotpot326'; // ← 與後端一致
+
 /* ===== 共用工具與設定 ===== */
 const STORE = { openHour:16, openMinute:30, closeHour:20, closeMinute:30, slotMinutes:15, slotCapacity:7 };
 const el = s => document.querySelector(s);
+let showAll = false;
+let currentList = [];
+
 function pad2(n){return n.toString().padStart(2,"0")}
 function formatCurrency(n){return " $" + n.toLocaleString("zh-Hant")}
 function todayIsoDate(){const d=new Date();return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`}
@@ -107,17 +108,34 @@ function generateSlotsForDate(dateStr){
   for(let t=start.getTime(); t<end.getTime(); t+=step){ arr.push(new Date(t)) }
   return arr;
 }
-function loadOrders(){ try{ return JSON.parse(localStorage.getItem("orders_v1"))||[] }catch{ return [] } }
-function saveOrders(list){ localStorage.setItem("orders_v1", JSON.stringify(list)); }
+
+async function apiList(dateStr){
+  const url = new URL(ENDPOINT);
+  url.searchParams.set('action','list');
+  if (dateStr) url.searchParams.set('date', dateStr);
+  url.searchParams.set('key', API_KEY);
+  const res = await fetch(url.toString(), { method:'GET' });
+  const json = await res.json();
+  if (!json.ok) throw new Error('list failed');
+  return (json.orders||[]).sort((a,b)=>new Date(a.assignedSlot)-new Date(b.assignedSlot));
+}
+async function apiDelete(id){
+  const res = await fetch(ENDPOINT, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ apiKey: API_KEY, action:'delete', id })
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error('delete failed');
+  return json;
+}
+
 function slotUsageMap(dateStr, list){
   const map={}; for(const o of list.filter(x=>x.date===dateStr)){ const k=slotKey(new Date(o.assignedSlot)); map[k]=(map[k]||0)+o.capacityUnits } return map;
 }
 
-/* ===== 渲染 ===== */
-function render(){
-  const dateStr=todayIsoDate();
-  const list=loadOrders().filter(o=>o.date===dateStr).sort((a,b)=>new Date(a.assignedSlot)-new Date(b.assignedSlot));
-
+function render(dateStr){
+  const list = showAll ? currentList : currentList.filter(o=>o.date===dateStr);
   // 時段佔用
   const m=slotUsageMap(dateStr, list), sum=el("#slotSummary"); sum.innerHTML="";
   for(const s of generateSlotsForDate(dateStr)){
@@ -130,7 +148,6 @@ function render(){
       <div class="h-2 bg-slate-100 rounded mt-1"><div class="h-2 bg-slate-900 rounded" style="width:${Math.min(100, used/STORE.slotCapacity*100)}%"></div></div>`;
     sum.appendChild(div);
   }
-
   // 訂單表
   const tbody=el("#ordersBody"); tbody.innerHTML="";
   let totalCap=0, revenue=0;
@@ -152,22 +169,62 @@ function render(){
   el("#statOrders").textContent=String(list.length);
   el("#statCapacity").textContent=String(totalCap);
   el("#statRevenue").textContent=formatCurrency(revenue);
-
-  // 綁刪除
   tbody.querySelectorAll(".del").forEach(btn=>{
-    btn.addEventListener("click",()=>{
-      const id=btn.getAttribute("data-id");
-      const all=loadOrders().filter(x=>x.id!==id);
-      saveOrders(all); render();
+    btn.addEventListener("click", async ()=>{
+      if (!confirm("確定刪除這張訂單？")) return;
+      await apiDelete(btn.getAttribute("data-id"));
+      await reloadAndRender();
     });
   });
 }
 
-/* ===== 匯出、清空、即時更新 ===== */
-function exportTodayCsv(){
-  const dateStr=todayIsoDate();
-  const list=loadOrders().filter(o=>o.date===dateStr);
+async function reloadAndRender(){
+  const dateStr = el("#datePicker").value || todayIsoDate();
+  currentList = await apiList(showAll ? '' : dateStr);
+  render(dateStr);
+}
+
+function exportCsv(){
+  const list = showAll ? currentList : currentList.filter(o=>o.date === (el("#datePicker").value || todayIsoDate()));
   const rows=[["訂單ID","日期","時段","姓名","電話","品項","火鍋等效","小計","折扣","總計","建立時間"]];
   for(const o of list){
-    rows.push([o.id,o.date,slotKey(new Date(o.assignedSlot)),o.customer?.name||"",o.customer?.phone||"",
+    rows.push([
+      o.id,o.date,slotKey(new Date(o.assignedSlot)),
+      o.customer?.name||"",o.customer?.phone||"",
       o.items.map(it=>`${it.name}×${it.qty}`).join(" / "),
+      o.capacityUnits,o.subtotal,o.discount,o.total,o.createdAt
+    ]);
+  }
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=`orders_${Date.now()}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.addEventListener("DOMContentLoaded", async ()=>{
+  el("#year").textContent=new Date().getFullYear();
+  const dp = el("#datePicker"); dp.value = todayIsoDate();
+  el("#toggleAll").addEventListener("click", async ()=>{
+    showAll = !showAll;
+    el("#toggleAll").textContent = showAll ? '只看今天' : '顯示全部';
+    await reloadAndRender();
+  });
+  el("#exportCsv").addEventListener("click", exportCsv);
+  el("#clearToday").addEventListener("click", async ()=>{
+    if(!confirm("清空今日所有訂單？此動作無法還原。")) return;
+    const today = todayIsoDate();
+    // 逐筆刪除今日（簡化版；資料量大建議後端做批次）
+    const todayList = currentList.filter(o=>o.date===today);
+    for (const o of todayList) { await apiDelete(o.id); }
+    await reloadAndRender();
+  });
+  dp.addEventListener("change", reloadAndRender);
+
+  await reloadAndRender();
+  // 自動更新（每 2 秒）
+  setInterval(reloadAndRender, 2000);
+});
+</script>
+</body>
+</html>
