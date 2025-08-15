@@ -5,10 +5,20 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>326臭臭鍋 線上點餐</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <meta name="color-scheme" content="light dark">
+  <!-- 只用亮色，避免 iOS Safari 把原生 select/input 變黑底 -->
+  <meta name="color-scheme" content="light">
   <style>
     .card{border-radius:1rem}.btn{border-radius:1rem}.badge{border-radius:999px}
     .container-slim{max-width:1200px}.mono{font-variant-numeric:tabular-nums}
+    /* 強制表單控制元件使用亮色（修正手機上看不到字） */
+    input, select, textarea, option, button { color-scheme: light; }
+    input, select, textarea {
+      background-color:#ffffff !important;
+      color:#0f172a !important;             /* slate-900 */
+      -webkit-text-fill-color:#0f172a;      /* iOS Safari */
+      border-color:#cbd5e1;                 /* slate-300 */
+    }
+    select option { background:#ffffff; color:#0f172a; }
   </style>
 
   <!-- Day.js + plugins（修正：加入 customParseFormat，避免 invalid time zone 錯誤） -->
@@ -47,11 +57,13 @@
         <div class="md:col-span-2">
           <label class="text-sm text-slate-600">搜尋商品</label>
           <input id="searchInput" type="text" placeholder="輸入關鍵字"
-                 class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+                 class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-900 placeholder-slate-400" />
         </div>
         <div>
           <label class="text-sm text-slate-600">標籤</label>
-          <select id="tagSelect" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"><option value="">全部</option></select>
+          <select id="tagSelect" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900">
+            <option value="">全部</option>
+          </select>
         </div>
       </div>
     </div>
@@ -82,16 +94,16 @@
       <form id="checkoutForm" class="space-y-4" autocomplete="off">
         <div>
           <label class="text-sm text-slate-600">姓名</label>
-          <input required id="customerName" type="text" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
+          <input required id="customerName" type="text" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
         </div>
         <div>
           <label class="text-sm text-slate-600">電話</label>
           <input required id="customerPhone" type="tel" pattern="[0-9\\-\\+\\s]{8,}" placeholder="09xx-xxx-xxx"
-                 class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" />
+                 class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
         </div>
         <div>
           <label class="text-sm text-slate-600">最早可取餐時間（選填）</label>
-          <select id="earliestTime" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2">
+          <select id="earliestTime" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900">
             <option value="">不指定（系統自動安排）</option>
           </select>
           <p class="text-xs text-slate-500 mt-1">未選時，系統會從「現在 + 準備緩衝」開始排；若已打烊，會自動排隔天第一個時段。</p>
@@ -299,7 +311,7 @@ function renderMenu(){
     const card=document.createElement("div"); card.className="card bg-white p-4 flex flex-col";
     const spiceHtml = item.spice
       ? `<label class="text-sm text-slate-600 block mt-2">辣度</label>
-         <select class="spice mt-1 w-full rounded-xl border border-slate-300 px-3 py-2">
+         <select class="spice mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900">
            ${item.spiceOpts.map(s=>`<option value="${s}">${s}</option>`).join("")}
          </select>` : "";
 
@@ -319,7 +331,7 @@ function renderMenu(){
         <div class="text-sm text-slate-600">加入購物車數量</div>
         <div class="flex items-center gap-2">
           <button class="dec btn px-3 py-2 border border-slate-300 hover:bg-slate-100">-</button>
-          <input type="number" min="1" value="1" class="qty w-16 text-center border border-slate-300 rounded-xl py-2" />
+          <input type="number" min="1" value="1" class="qty w-16 text-center border border-slate-300 rounded-xl py-2 bg-white text-slate-900" />
           <button class="inc btn px-3 py-2 border border-slate-300 hover:bg-slate-100">+</button>
           <button class="add btn px-3 py-2 bg-slate-900 text-white hover:bg-slate-800">加入</button>
         </div>
@@ -358,7 +370,7 @@ function renderCart(){
           <div class="font-medium truncate">${row.item.name}</div>
           <div class="text-sm text-slate-600">
             單價 ${formatCurrency(row.item.price)} ×
-            <input type="number" min="1" value="${row.qty}" class="lineQty w-16 text-center border border-slate-300 rounded-lg py-1 mx-1">
+            <input type="number" min="1" value="${row.qty}" class="lineQty w-16 text-center border border-slate-300 rounded-lg py-1 mx-1 bg-white text-slate-900">
             = <span class="mono">${formatCurrency(price)}</span>
           </div>
         </div>
