@@ -7,11 +7,14 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <meta name="color-scheme" content="light dark">
   <style>
-    .card{border-radius:1rem}.btn{border-radius:1rem}.container-slim{max-width:1200px}.mono{font-variant-numeric:tabular-nums}
-    .banner{display:none}
+    .card{border-radius:1rem}
+    .btn{border-radius:1rem}
+    .badge{border-radius:999px}
+    .mono{font-variant-numeric:tabular-nums}
+    .container-slim{max-width:1200px}
   </style>
 
-  <!-- 固定以台北時區計算與顯示 -->
+  <!-- Day.js + TZ（固定用台北） -->
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
@@ -23,236 +26,314 @@
   </script>
 </head>
 <body class="bg-slate-50 text-slate-900">
-
-<script>
-// 簡易 PIN（前端可見，僅防誤入）
-const OWNER_PIN = "326";
-const input = prompt("請輸入管理 PIN");
-if (input !== OWNER_PIN) { alert("PIN 錯誤"); location.href = "index.html"; }
-</script>
-
 <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
   <div class="mx-auto container-slim px-4 py-4 flex items-center justify-between">
     <div class="flex items-center gap-3">
       <div class="w-10 h-10 bg-slate-900 text-white rounded-xl grid place-items-center text-lg font-bold select-none">管</div>
       <div>
         <div class="text-xl font-semibold">326臭臭鍋 訂單管理</div>
-        <div class="text-xs text-slate-500">16:30–20:30 ・ 每 15 分鐘上限 7 鍋</div>
+        <div class="text-xs text-slate-500">營業 16:30–20:30 ・ 每 15 分鐘上限 7 鍋</div>
       </div>
     </div>
-    <div class="flex items-center gap-2">
-      <input id="datePicker" type="date" class="px-3 py-2 border border-slate-300 rounded-lg">
-      <button id="toggleAll" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">顯示全部</button>
-      <button id="exportCsv" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">匯出 CSV</button>
-      <button id="clearToday" class="btn px-3 py-2 bg-red-600 text-white hover:bg-red-700">清空今日</button>
+    <div class="flex items-center gap-2 text-sm">
+      <span class="text-slate-600">最近同步：</span>
+      <span id="lastSync" class="mono text-slate-900">—</span>
     </div>
-  </div>
-  <div id="errBanner" class="banner bg-red-50 text-red-700 text-sm px-4 py-2 border-t border-red-100">
-    讀取發生錯誤，將於數秒後自動重試…
   </div>
 </header>
 
-<main class="mx-auto container-slim px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-  <section class="lg:col-span-1">
-    <div class="card bg-white p-5">
-      <h2 class="text-lg font-semibold mb-2">時段佔用</h2>
-      <div id="slotSummary" class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm"></div>
-    </div>
-    <div class="card bg-white p-5 mt-6">
-      <h2 class="text-lg font-semibold mb-2">統計</h2>
-      <div class="flex items-center justify-between py-1"><div class="text-slate-600">訂單數</div><div id="statOrders" class="mono font-semibold">0</div></div>
-      <div class="flex items-center justify-between py-1"><div class="text-slate-600">總鍋數（等效）</div><div id="statCapacity" class="mono font-semibold">0</div></div>
-      <div class="flex items-center justify-between py-1"><div class="text-slate-600">營業額</div><div id="statRevenue" class="mono font-semibold">$0</div></div>
-    </div>
-  </section>
-
-  <section class="lg:col-span-2">
-    <div class="card bg-white p-5">
-      <h2 class="text-lg font-semibold mb-4">訂單列表</h2>
-      <div class="overflow-auto">
-        <table class="w-full text-sm border border-slate-200">
-          <thead class="bg-slate-50">
-            <tr>
-              <th class="p-2 border-b text-left">時間</th>
-              <th class="p-2 border-b text-left">姓名</th>
-              <th class="p-2 border-b text-left">電話</th>
-              <th class="p-2 border-b text-left">品項</th>
-              <th class="p-2 border-b text-right">鍋數</th>
-              <th class="p-2 border-b text-right">金額</th>
-              <th class="p-2 border-b text-right">操作</th>
-            </tr>
-          </thead>
-          <tbody id="ordersBody"></tbody>
-        </table>
+<main class="mx-auto container-slim px-4 py-6 space-y-6">
+  <!-- 控制列 -->
+  <section class="card bg-white p-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-slate-600 shrink-0">查詢日期</label>
+        <input id="dateInput" type="date" class="w-full rounded-xl border border-slate-300 px-3 py-2">
+        <button id="btnToday" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">今天</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btnRefresh" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">刷新</button>
+        <label class="flex items-center gap-2 text-sm text-slate-700">
+          <input id="autoToggle" type="checkbox" class="scale-110">
+          自動每 15 秒更新
+        </label>
+      </div>
+      <div class="text-right">
+        <span class="badge text-xs px-2 py-1 bg-slate-100 text-slate-700 border border-slate-200">台北時區</span>
       </div>
     </div>
   </section>
+
+  <!-- 彙總 -->
+  <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="card bg-white p-4">
+      <div class="text-sm text-slate-600">訂單數</div>
+      <div id="sumOrders" class="text-2xl font-semibold mono">0</div>
+    </div>
+    <div class="card bg-white p-4">
+      <div class="text-sm text-slate-600">總火鍋等效數</div>
+      <div id="sumCapacity" class="text-2xl font-semibold mono">0</div>
+    </div>
+    <div class="card bg-white p-4">
+      <div class="text-sm text-slate-600">銷售金額</div>
+      <div id="sumRevenue" class="text-2xl font-semibold mono">$0</div>
+    </div>
+  </section>
+
+  <!-- 時段清單 -->
+  <section id="slotList" class="space-y-4"></section>
 </main>
 
-<footer class="border-t border-slate-200 mt-12">
-  <div class="mx-auto container-slim px-4 py-6 text-sm text-slate-600">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div>© <span id="year"></span> 326臭臭鍋</div>
-      <div class="text-slate-500">資料儲存於 Google Sheet（Apps Script）</div>
+<!-- 密碼門檻 -->
+<div id="authGate" class="fixed inset-0 z-40 bg-white/95 backdrop-blur grid place-items-center">
+  <div class="card bg-white p-6 w-[92%] max-w-sm border border-slate-200">
+    <h2 class="text-lg font-semibold mb-2">老闆入口</h2>
+    <p class="text-slate-600 text-sm mb-3">請輸入管理密碼</p>
+    <input id="passInput" type="password" class="w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="輸入密碼">
+    <p id="passError" class="text-red-600 text-sm mt-2"></p>
+    <div class="mt-4 flex justify-end gap-2">
+      <button id="passSubmit" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">進入</button>
     </div>
+    <p class="text-xs text-slate-500 mt-4">這是純前端簡易密碼，只防誤闖，勿當正式資安機制。</p>
   </div>
-</footer>
+</div>
 
 <script>
-/* ===== API 端點與 Key ===== */
+/* ===== 基本設定 ===== */
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxvRLFEEufoN3dIwyBeTZp315vWdmxZYL4cqEubJf6Gcy7voEKw0UNbZ25q3_7KLTQERw/exec';
 const API_KEY  = '326hotpot326';
 
-/* ===== 共用工具與設定（台北時區版） ===== */
-const STORE = { openHour:16, openMinute:30, closeHour:20, closeMinute:30, slotMinutes:15, slotCapacity:7 };
+// 簡易密碼（自行修改）。也可用網址 ?pass=xxxxx 直接帶入
+const OWNER_PASS = '326boss';
+
+// 營運設定（僅供容量顯示）
+const STORE = { slotCapacity: 7 };
+
+/* ===== 小工具 ===== */
 const el = s => document.querySelector(s);
-let showAll = false;
-let allOrders = [];
-let polling = null;
+function pad2(n){ return String(n).padStart(2,'0'); }
+function formatCurrency(n){ return '$' + Number(n||0).toLocaleString('zh-Hant'); }
+function todayYMD(){ return dayjs().tz().format('YYYY-MM-DD'); }
+function slotKey(iso){ return dayjs(iso).tz().format('HH:mm'); }
 
-function pad2(n){return n.toString().padStart(2,"0")}
-function formatCurrency(n){return " $" + n.toLocaleString("zh-Hant")}
-function todayIsoDate(){ return dayjs().tz().format('YYYY-MM-DD'); }
-function dateAtTime(dateStr,hh,mm){
-  return dayjs.tz(`${dateStr} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm').toDate();
+async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(resource, { ...options, signal: ctrl.signal });
+    return res;
+  } catch (err) {
+    if (err && err.name === 'AbortError') throw new Error('timeout');
+    throw err;
+  } finally { clearTimeout(timer); }
 }
-function slotKey(d){ return dayjs(d).tz().format('HH:mm'); }
-function generateSlotsForDate(dateStr){
-  const start = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
-  const end   = dayjs.tz(`${dateStr} ${String(STORE.closeHour).padStart(2,'0')}:${String(STORE.closeMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
-  const arr=[]; for(let t=start.clone(); t.isBefore(end); t=t.add(STORE.slotMinutes,'minute')) arr.push(t.toDate()); return arr;
-}
-function isInStoreDay(isoString, dateStr){
-  return dayjs(isoString).tz().format('YYYY-MM-DD') === dateStr;
+async function fetchJson(url, options = {}, timeoutMs = 15000) {
+  const res = await fetchWithTimeout(url, options, timeoutMs);
+  const txt = await res.text();
+  try { return JSON.parse(txt); }
+  catch { throw new Error('bad_json'); }
 }
 
-async function apiListAll(){
+/* ===== 後端 API ===== */
+async function apiList(dateStr){
   const url = new URL(ENDPOINT);
   url.searchParams.set('action','list');
+  if (dateStr) url.searchParams.set('date', dateStr);
   url.searchParams.set('key', API_KEY);
-  const res = await fetch(url.toString(), { method:'GET' });
-  const json = await res.json();
-  if (!json.ok) throw new Error('list_failed');
-  return (json.orders||[]).sort((a,b)=>new Date(a.assignedSlot)-new Date(b.assignedSlot));
+  const data = await fetchJson(url.toString());
+  if (!data.ok) throw new Error(data.error || 'list_failed');
+  return data.orders || [];
 }
 async function apiDelete(id){
-  const res = await fetch(ENDPOINT, {
-    method:'POST',
-    body: JSON.stringify({ apiKey: API_KEY, action:'delete', id })
-  });
-  const json = await res.json();
-  if (!json.ok) throw new Error('delete_failed');
-  return json;
+  const data = await fetchJson(ENDPOINT, {
+    method: 'POST',
+    body: JSON.stringify({ apiKey: API_KEY, action: 'delete', id })
+  }, 15000);
+  if (!data.ok) throw new Error(data.error || 'delete_failed');
+  return data;
 }
 
-function render(){
-  const dateStr = el("#datePicker").value || todayIsoDate();
-  const list = showAll ? allOrders : allOrders.filter(o=>isInStoreDay(o.assignedSlot, dateStr));
+/* ===== 渲染 ===== */
+function renderSummary(orders){
+  const sumOrders = orders.length;
+  const sumCapacity = orders.reduce((s,o)=> s + Number(o.capacityUnits||0), 0);
+  const sumRevenue = orders.reduce((s,o)=> s + Number(o.total||0), 0);
+  el('#sumOrders').textContent = sumOrders;
+  el('#sumCapacity').textContent = sumCapacity;
+  el('#sumRevenue').textContent = formatCurrency(sumRevenue);
+}
 
-  // 時段佔用（選定那一天）
-  const m={};
-  const dayOrders = allOrders.filter(o=>isInStoreDay(o.assignedSlot, dateStr));
-  for(const o of dayOrders){
-    const k = slotKey(new Date(o.assignedSlot));
-    m[k] = (m[k]||0) + (o.capacityUnits||0);
+function renderOrders(orders){
+  // 依時段分組
+  const groups = {};
+  for (const o of orders) {
+    const k = slotKey(o.assignedSlot || o.createdAt || new Date().toISOString());
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(o);
   }
-  const sum=el("#slotSummary"); sum.innerHTML="";
-  for(const s of generateSlotsForDate(dateStr)){
-    const k=slotKey(s), used=m[k]||0;
-    const div=document.createElement("div");
-    div.className="border border-slate-200 rounded-xl p-2";
-    div.innerHTML=`
-      <div class="text-xs text-slate-600">${k}</div>
-      <div class="font-semibold mono">${used} / ${STORE.slotCapacity}</div>
-      <div class="h-2 bg-slate-100 rounded mt-1"><div class="h-2 bg-slate-900 rounded" style="width:${Math.min(100, used/STORE.slotCapacity*100)}%"></div></div>`;
-    sum.appendChild(div);
+  const slots = Object.keys(groups).sort((a,b)=> a.localeCompare(b));
+
+  const root = el('#slotList');
+  root.innerHTML = '';
+
+  if (slots.length === 0) {
+    root.innerHTML = '<div class="card bg-white p-6 text-slate-600">本日尚無訂單。</div>';
+    renderSummary([]);
+    return;
   }
 
-  // 訂單表
-  const tbody=el("#ordersBody"); tbody.innerHTML="";
-  let totalCap=0, revenue=0;
-  for(const o of list){
-    totalCap+=o.capacityUnits; revenue+=o.total;
-    const tr=document.createElement("tr");
-    tr.innerHTML=`
-      <td class="p-2 border-b">${dayjs(o.assignedSlot).tz().format('HH:mm')}</td>
-      <td class="p-2 border-b">${o.customer?.name||""}</td>
-      <td class="p-2 border-b">${o.customer?.phone||""}</td>
-      <td class="p-2 border-b">${o.items.map(it=>`${it.name}×${it.qty}`).join("，")}</td>
-      <td class="p-2 border-b text-right mono">${o.capacityUnits}</td>
-      <td class="p-2 border-b text-right mono">${formatCurrency(o.total)}</td>
-      <td class="p-2 border-b text-right">
-        <button data-id="${o.id}" class="del btn px-2 py-1 border border-slate-300 hover:bg-slate-100">刪除</button>
-      </td>`;
-    tbody.appendChild(tr);
-  }
-  el("#statOrders").textContent=String(list.length);
-  el("#statCapacity").textContent=String(totalCap);
-  el("#statRevenue").textContent=formatCurrency(revenue);
+  // 逐時段輸出
+  const frag = document.createDocumentFragment();
+  for (const hhmm of slots) {
+    const arr = groups[hhmm].sort((a,b)=> (a.createdAt||'').localeCompare(b.createdAt||''));
+    const used = arr.reduce((s,o)=> s + Number(o.capacityUnits||0), 0);
+    const pct = Math.max(0, Math.min(100, Math.round(used / STORE.slotCapacity * 100)));
 
-  // 綁刪除
-  tbody.querySelectorAll(".del").forEach(btn=>{
-    btn.addEventListener("click", async ()=>{
-      if (!confirm("確定刪除這張訂單？")) return;
-      await apiDelete(btn.getAttribute("data-id"));
-      await reloadAndRender();
+    const sec = document.createElement('section');
+    sec.className = 'card bg-white p-4';
+    sec.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="text-lg font-semibold">${hhmm}</div>
+        <div class="text-sm text-slate-600">容量 ${used} / ${STORE.slotCapacity}</div>
+      </div>
+      <div class="w-full h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
+        <div class="h-2 bg-slate-900" style="width:${pct}%"></div>
+      </div>
+      <div class="mt-4 divide-y divide-slate-200" id="list-${hhmm}"></div>
+    `;
+    const list = sec.querySelector(`#list-${hhmm}`);
+
+    for (const o of arr) {
+      const itemsText = (Array.isArray(o.items)?o.items:[])
+        .map(it => `${it.name}×${it.qty}`).join('、') || '(無品項)';
+      const row = document.createElement('div');
+      row.className = 'py-3 flex items-start justify-between gap-4';
+      row.innerHTML = `
+        <div class="min-w-0">
+          <div class="font-medium">
+            <span class="inline-block min-w-[4.5rem]">#${o.id?.slice(-6) || ''}</span>
+            <span class="ml-2">${o.customer?.name || ''}</span>
+            <a class="ml-2 text-slate-600 underline" href="tel:${o.customer?.phone || ''}">${o.customer?.phone || ''}</a>
+            <span class="ml-2 text-xs text-slate-500">${dayjs(o.createdAt).tz().format('HH:mm:ss')} 建立</span>
+          </div>
+          <div class="text-sm text-slate-700 mt-1">${itemsText}</div>
+          <div class="text-xs text-slate-500">等效數：${Number(o.capacityUnits||0)} ・ 小計：${formatCurrency(o.subtotal||0)} ・ 折扣：${formatCurrency(o.discount||0)} ・ 合計：<span class="mono">${formatCurrency(o.total||0)}</span></div>
+        </div>
+        <div class="shrink-0 flex items-center gap-2">
+          <button data-id="${o.id}" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100 btn-delete">刪除</button>
+        </div>
+      `;
+      list.appendChild(row);
+    }
+
+    frag.appendChild(sec);
+  }
+  root.appendChild(frag);
+
+  // 綁定刪除事件
+  root.querySelectorAll('.btn-delete').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      const id = e.currentTarget.getAttribute('data-id');
+      if (!id) return;
+      if (!confirm(`確定刪除訂單 ${id}？`)) return;
+      e.currentTarget.disabled = true;
+      try {
+        await apiDelete(id);
+        await refreshOrders(); // 重新抓
+      } catch (err) {
+        console.error('delete_failed', err);
+        alert('刪除失敗，請稍後再試');
+      } finally {
+        e.currentTarget.disabled = false;
+      }
     });
   });
+
+  // 彙總
+  renderSummary(orders);
 }
 
-async function reloadAndRender(){
-  try{
-    el("#errBanner").style.display = 'none';
-    allOrders = await apiListAll();
-    render();
-  }catch(err){
-    console.error('list_failed', err);
-    el("#errBanner").style.display = 'block';
+/* ===== 輪詢與控制 ===== */
+let polling = false, timer = null;
+async function refreshOrders(){
+  if (polling) return;
+  polling = true;
+  const dateStr = el('#dateInput').value || todayYMD();
+  try {
+    const orders = await apiList(dateStr);
+    renderOrders(orders);
+    el('#lastSync').textContent = dayjs().tz().format('YYYY-MM-DD HH:mm:ss');
+  } catch (e) {
+    console.error('refresh failed', e);
+    // 顯示錯誤
+    const root = el('#slotList');
+    if (root.innerHTML.trim() === '') {
+      root.innerHTML = `<div class="card bg-white p-6 text-red-600">讀取失敗，請點「刷新」重試。</div>`;
+    }
+  } finally {
+    polling = false;
   }
 }
 
-function exportCsv(){
-  const dateStr = el("#datePicker").value || todayIsoDate();
-  const list = showAll ? allOrders : allOrders.filter(o=>isInStoreDay(o.assignedSlot, dateStr));
-  const rows=[["訂單ID","日期(台北)","時段","姓名","電話","品項","火鍋等效","小計","折扣","總計","建立時間"]];
-  for(const o of list){
-    rows.push([
-      o.id,
-      dayjs(o.assignedSlot).tz().format('YYYY-MM-DD'),
-      dayjs(o.assignedSlot).tz().format('HH:mm'),
-      o.customer?.name||"",o.customer?.phone||"",
-      o.items.map(it=>`${it.name}×${it.qty}`).join(" / "),
-      o.capacityUnits,o.subtotal,o.discount,o.total,o.createdAt
-    ]);
-  }
-  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
-  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a"); a.href=url; a.download=`orders_${Date.now()}.csv`; a.click();
-  URL.revokeObjectURL(url);
+function startAuto(){
+  if (timer) clearInterval(timer);
+  timer = setInterval(refreshOrders, 15000);
+}
+function stopAuto(){
+  if (timer) { clearInterval(timer); timer = null; }
 }
 
-document.addEventListener("DOMContentLoaded", async ()=>{
-  el("#year").textContent=new Date().getFullYear();
-  const dp = el("#datePicker"); dp.value = dayjs().tz().format('YYYY-MM-DD');
+/* ===== 簡易密碼門檻 ===== */
+function checkPass(input){
+  const urlPass = new URL(location.href).searchParams.get('pass');
+  const pass = (input || '').trim();
+  const valid = (urlPass && urlPass === OWNER_PASS) || (pass && pass === OWNER_PASS);
+  if (valid) {
+    localStorage.setItem('ownerAuth', '1');
+    el('#authGate').style.display = 'none';
+    return true;
+  }
+  return false;
+}
 
-  el("#toggleAll").addEventListener("click", async ()=>{
-    showAll = !showAll;
-    el("#toggleAll").textContent = showAll ? '只看今天' : '顯示全部';
-    render();
+/* ===== 啟動 ===== */
+document.addEventListener('DOMContentLoaded', ()=>{
+  // 日期欄預設為台北今天
+  el('#dateInput').value = todayYMD();
+  el('#btnToday').addEventListener('click', ()=>{
+    el('#dateInput').value = todayYMD();
+    refreshOrders();
   });
-  el("#exportCsv").addEventListener("click", exportCsv);
-  el("#clearToday").addEventListener("click", async ()=>{
-    const dateStr = el("#datePicker").value || todayIsoDate();
-    if(!confirm(`清空 ${dateStr} 這一天的所有訂單？此動作無法還原。`)) return;
-    const list = allOrders.filter(o=>isInStoreDay(o.assignedSlot, dateStr));
-    for (const o of list) { await apiDelete(o.id); }
-    await reloadAndRender();
-  });
-  dp.addEventListener("change", render);
+  el('#btnRefresh').addEventListener('click', refreshOrders);
+  el('#dateInput').addEventListener('change', refreshOrders);
+  el('#autoToggle').addEventListener('change', (e)=> e.target.checked ? startAuto() : stopAuto());
 
-  await reloadAndRender();
-  polling = setInterval(reloadAndRender, 2000);
+  // 目標：頁面可見時才輪詢
+  document.addEventListener('visibilitychange', ()=>{
+    if (document.hidden) stopAuto();
+    else { refreshOrders(); if (el('#autoToggle').checked) startAuto(); }
+  });
+
+  // 密碼門檻
+  const saved = localStorage.getItem('ownerAuth') === '1';
+  if (saved || checkPass('')) {
+    el('#authGate').style.display = 'none';
+    refreshOrders();
+    el('#autoToggle').checked = true;
+    startAuto();
+  } else {
+    const submit = () => {
+      const ok = checkPass(el('#passInput').value);
+      if (!ok) el('#passError').textContent = '密碼錯誤';
+      else {
+        refreshOrders();
+        el('#autoToggle').checked = true;
+        startAuto();
+      }
+    };
+    el('#passSubmit').addEventListener('click', submit);
+    el('#passInput').addEventListener('keyup', (e)=>{ if (e.key === 'Enter') submit(); });
+  }
 });
 </script>
 </body>
