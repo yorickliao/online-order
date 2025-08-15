@@ -22,14 +22,14 @@
     dayjs.tz.setDefault(STORE_TZ);
   </script>
 </head>
-<body class="bg-slate-50 text-slate-900">
+<body class="bg-slate-50 text-slate-900 selection:bg-slate-200 selection:text-slate-900">
 <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
   <div class="mx-auto container-slim px-4 py-4 flex items-center justify-between">
     <div class="flex items-center gap-3">
       <div class="w-10 h-10 bg-slate-900 text-white rounded-xl grid place-items-center text-lg font-bold select-none">店</div>
       <div>
         <div class="text-xl font-semibold">326臭臭鍋 線上點餐</div>
-        <div class="text-xs text-slate-500">營業時間 16:30–20:30 ・ 每 15 分鐘上限 7 鍋</div>
+        <div class="text-xs text-slate-500">營業時間 16:30–20:30</div>
       </div>
     </div>
     <div class="flex items-center gap-2">
@@ -110,6 +110,7 @@
     <h3 class="text-xl font-semibold mb-2">下單成功</h3>
     <p class="text-slate-700">您的取餐時段為：</p>
     <p id="assignedSlotText" class="text-2xl font-bold mt-1"></p>
+    <p class="text-sm text-slate-600 mt-2">請準時取餐，現場可能會有 5–10 分鐘彈性。</p>
     <div class="mt-4 flex justify-end">
       <button id="closeSuccess" class="btn px-4 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
     </div>
@@ -126,11 +127,11 @@
 </footer>
 
 <script>
-/* ===== API 端點與 Key ===== */
+/* ===== API 端點與 Key（請依你的部署更新） ===== */
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxvRLFEEufoN3dIwyBeTZp315vWdmxZYL4cqEubJf6Gcy7voEKw0UNbZ25q3_7KLTQERw/exec';
 const API_KEY  = '326hotpot326';
 
-/* ===== 設定 ===== */
+/* ===== 店舖設定 ===== */
 const STORE = {
   name: "326臭臭鍋",
   openHour: 16, openMinute: 30,
@@ -193,26 +194,51 @@ function generateSlotsForDate(dateStr){
 function addDaysIso(dateStr, days){ return dayjs.tz(dateStr,'YYYY-MM-DD').add(days,'day').format('YYYY-MM-DD'); }
 function cartTotalQty(){ return Object.values(state.cart).reduce((s,row)=> s + Math.max(0, parseInt(row?.qty||0,10)||0), 0); }
 
+/* ===== 可靠的 fetch 包裝（逾時可控） ===== */
+async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(resource, { ...options, signal: ctrl.signal });
+    return res;
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      throw new Error('timeout');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function fetchJson(url, options = {}, timeoutMs = 15000) {
+  const res = await fetchWithTimeout(url, options, timeoutMs);
+  const txt = await res.text();
+  let data;
+  try { data = JSON.parse(txt); }
+  catch (_) { throw new Error('bad_json'); }
+  return data;
+}
+
+/* ===== 後端 API ===== */
 async function apiList(dateStr){
   const url = new URL(ENDPOINT);
   url.searchParams.set('action','list');
   if (dateStr) url.searchParams.set('date', dateStr);
   url.searchParams.set('key', API_KEY);
-  const res = await fetch(url.toString(), { method:'GET' });
-  const json = await res.json();
-  if (!json.ok) throw new Error('list_failed');
+  const json = await fetchJson(url.toString(), { method:'GET' }, 15000);
+  if (!json.ok) throw new Error(json.error || 'list_failed');
   return json.orders || [];
 }
 async function apiCreate(order){
-  const res = await fetch(ENDPOINT, {
+  const json = await fetchJson(ENDPOINT, {
     method:'POST',
     body: JSON.stringify({ apiKey: API_KEY, action:'create', order })
-  });
-  const json = await res.json();
+  }, 20000);
   if (!json.ok) throw new Error(json.error || 'create_failed');
   return json;
 }
 
+/* ===== 訂位計算 ===== */
 function bookedCapacityMap(dateStr){
   const map={};
   for(const o of state.ordersCache.filter(o=>o.date===dateStr)){
@@ -341,12 +367,10 @@ function renderCart(){
   el("#cartTotal").textContent=formatCurrency(Math.max(0,subtotal-discount));
 }
 
-/* ===== 取餐時段／下單 ===== */
+/* ===== 取餐時段（含後援） ===== */
 function populateEarliestTimeOptions(){
   const sel=el("#earliestTime");
   const dateStr=todayIsoDate();
-
-  // 重建選單（先放回預設不指定）
   sel.innerHTML = '<option value="">不指定（系統自動安排）</option>';
 
   let slots = [];
@@ -360,7 +384,6 @@ function populateEarliestTimeOptions(){
       sel.appendChild(opt);
     }
   } else {
-    // 後援：不用任何外掛，純手動把 16:30~20:30 每 15 分鐘塞進去
     let h = STORE.openHour, m = STORE.openMinute;
     while (h < STORE.closeHour || (h === STORE.closeHour && m < STORE.closeMinute)) {
       const label = `${pad2(h)}:${pad2(m)}`;
@@ -371,96 +394,94 @@ function populateEarliestTimeOptions(){
       while (m >= 60) { h += 1; m -= 60; }
     }
   }
-  sel.disabled = false; // 確保可選
+  sel.disabled = false;
 }
 
+/* ===== 送單（逾時 & 錯誤一定還原按鈕） ===== */
 async function onSubmitOrder(e){
   e.preventDefault();
   const submitBtn = e.target.querySelector('button[type="submit"]');
-  submitBtn.disabled = true; submitBtn.textContent = '送出中…';
-  const fail = (msg) => { el("#formError").textContent = msg; submitBtn.disabled = false; submitBtn.textContent = '送出訂單'; };
+  const setBusy = (b)=>{ submitBtn.disabled = b; submitBtn.textContent = b ? '送出中…' : '送出訂單'; };
+  const showErr = (msg)=>{ el("#formError").textContent = msg; };
 
+  setBusy(true);
   el("#formError").textContent = "";
 
-  if (cartTotalQty() === 0) return fail("購物車尚無商品。");
+  try{
+    if (cartTotalQty() === 0) { showErr("購物車尚無商品。"); return; }
+    const name = el("#customerName").value.trim();
+    const phone = el("#customerPhone").value.trim();
+    if (!name || !phone) { showErr("請完整填寫姓名與電話。"); return; }
 
-  const name = el("#customerName").value.trim();
-  const phone = el("#customerPhone").value.trim();
-  if (!name || !phone) return fail("請完整填寫姓名與電話。");
+    let dateStr = todayIsoDate();
+    const openToday  = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
+    const closeToday = dayjs.tz(`${dateStr} ${String(STORE.closeHour).padStart(2,'0')}:${String(STORE.closeMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
 
-  let dateStr = todayIsoDate();
-  const openToday  = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
-  const closeToday = dayjs.tz(`${dateStr} ${String(STORE.closeHour).padStart(2,'0')}:${String(STORE.closeMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
-
-  const earliestSel = el("#earliestTime").value;
-  let earliest;
-
-  if (earliestSel) {
-    earliest = dayjs.tz(`${dateStr} ${earliestSel}`, 'YYYY-MM-DD HH:mm');
-  } else {
-    const candidate = dayjs().tz().add(STORE.prepBufferMinutes, 'minute');
-    if (candidate.isBefore(openToday)) {
-      earliest = openToday;
-    } else if (candidate.isAfter(closeToday)) {
-      dateStr = dayjs.tz(dateStr,'YYYY-MM-DD').add(1,'day').format('YYYY-MM-DD');
-      earliest = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm');
+    const earliestSel = el("#earliestTime").value;
+    let earliest;
+    if (earliestSel) {
+      earliest = dayjs.tz(`${dateStr} ${earliestSel}`, 'YYYY-MM-DD HH:mm');
     } else {
-      earliest = candidate;
+      const candidate = dayjs().tz().add(STORE.prepBufferMinutes, 'minute');
+      if (candidate.isBefore(openToday))       earliest = openToday;
+      else if (candidate.isAfter(closeToday)) { dateStr = dayjs.tz(dateStr,'YYYY-MM-DD').add(1,'day').format('YYYY-MM-DD'); earliest = dayjs.tz(`${dateStr} ${String(STORE.openHour).padStart(2,'0')}:${String(STORE.openMinute).padStart(2,'0')}`, 'YYYY-MM-DD HH:mm'); }
+      else                                     earliest = candidate;
     }
-  }
+    const rounded = roundUpToSlot(earliest.toDate(), STORE.slotMinutes);
 
-  const rounded = roundUpToSlot(earliest.toDate(), STORE.slotMinutes);
+    try{
+      state.ordersCache = await apiList(dateStr);
+    }catch(_){
+      await new Promise(r=>setTimeout(r, 800));
+      state.ordersCache = await apiList(dateStr);
+    }
 
-  try {
-    state.ordersCache = await apiList(dateStr);
-  } catch (err) {
-    console.error('list failed', err);
-    return fail("讀取目前訂單失敗，請稍後再試。");
-  }
+    let slot = autoAssignSlot(dateStr, rounded);
+    if (!slot) {
+      const tmr = dayjs.tz(dateStr,'YYYY-MM-DD').add(1,'day').format('YYYY-MM-DD');
+      try { state.ordersCache = await apiList(tmr); } catch(_){}
+      const tmrOpen = dateAtTime(tmr, STORE.openHour, STORE.openMinute);
+      slot = autoAssignSlot(tmr, tmrOpen);
+      if (slot) dateStr = tmr;
+    }
+    if (!slot) { showErr("近期可用時段已滿，請改天或來電訂餐。"); return; }
 
-  let slot = autoAssignSlot(dateStr, rounded);
-  if (!slot) {
-    const tmr = addDaysIso(dateStr, 1);
-    try { state.ordersCache = await apiList(tmr); } catch(_){}
-    const tmrOpen = dateAtTime(tmr, STORE.openHour, STORE.openMinute);
-    slot = autoAssignSlot(tmr, tmrOpen);
-    if (slot) dateStr = tmr;
-  }
-  if (!slot) return fail("近期可用時段已滿，請改天或來電訂餐。");
+    const items = Object.values(state.cart).map(r=>({
+      id:r.item.id, name:r.item.name, price:r.item.price, qty:r.qty, capacityUnits:r.item.capacityUnits
+    }));
+    const capacityUnits = items.reduce((s,it)=>s+it.capacityUnits*it.qty,0);
+    const subtotal = items.reduce((s,it)=>s+it.price*it.qty,0);
+    const discount = subtotal >= STORE.discountThreshold ? STORE.discountAmount : 0;
+    const total = Math.max(0, subtotal - discount);
 
-  const items = Object.values(state.cart).map(r=>({
-    id:r.item.id, name:r.item.name, price:r.item.price,
-    qty:r.qty, capacityUnits:r.item.capacityUnits
-  }));
-  const capacityUnits = items.reduce((s,it)=>s+it.capacityUnits*it.qty,0);
-  const subtotal = items.reduce((s,it)=>s+it.price*it.qty,0);
-  const discount = subtotal >= STORE.discountThreshold ? STORE.discountAmount : 0;
-  const total = Math.max(0, subtotal - discount);
+    const order = {
+      id:"O"+Date.now(),
+      date: dateStr,
+      assignedSlot: slot.toISOString(),
+      capacityUnits,
+      customer:{ name, phone },
+      items, subtotal, discount, total,
+      createdAt: new Date().toISOString(),
+      source:"web-customer",
+    };
 
-  const order = {
-    id:"O"+Date.now(),
-    date: dateStr,
-    assignedSlot: slot.toISOString(),
-    capacityUnits,
-    customer:{ name, phone },
-    items, subtotal, discount, total,
-    createdAt: new Date().toISOString(),
-    source:"web-customer",
-  };
-
-  try {
     const ret = await apiCreate(order);
-    console.log('create ok', ret);
-    state.cart = {}; renderCart();
+
+    state.cart = {};
+    renderCart();
     el("#assignedSlotText").textContent = dayjs(order.assignedSlot).tz().format('YYYY-MM-DD HH:mm');
     el("#successModal").classList.remove("hidden");
-  } catch (err) {
-    console.error('create failed', err);
-    fail(err.message === 'empty_order' ? '購物車尚無商品，無法送出。' : '送單失敗，請稍後再試。');
-    return;
+  }catch(err){
+    console.error('submit_failed', err);
+    const msg =
+      (err && err.message === 'empty_order') ? '購物車尚無商品，無法送出。' :
+      (err && err.message === 'timeout')     ? '連線逾時，請再試一次。' :
+      (err && err.message === 'bad_json')    ? '伺服器回應格式異常，請再試一次。' :
+                                               '送單失敗，請稍後再試。';
+    showErr(msg);
+  }finally{
+    setBusy(false);
   }
-
-  submitBtn.disabled = false; submitBtn.textContent = '送出訂單';
 }
 
 /* ===== 啟動 ===== */
