@@ -13,6 +13,7 @@
     input,select,textarea,option,button{color-scheme:light}
     input,select,textarea{background:#fff!important;color:#0f172a!important;-webkit-text-fill-color:#0f172a;border-color:#cbd5e1}
     select option{background:#fff;color:#0f172a}
+    .scroll-y{overflow-y:auto;-webkit-overflow-scrolling:touch}
   </style>
 
   <!-- Day.js + plugins（台北時區） -->
@@ -111,53 +112,56 @@
 </div>
 
 <!-- 火鍋細項 Modal（辣度、數量、單點、備註） -->
-<div id="potModal" class="fixed inset-0 z-40 hidden">
+<div id="potModal" class="fixed inset-0 z-40 hidden scroll-y">  <!-- 這裡加 scroll-y -->
   <div class="absolute inset-0 bg-black/40"></div>
-  <div class="relative z-10 mx-auto my-10 w-[92%] max-w-2xl card bg-white p-6">
-    <div class="flex items-start justify-between">
-      <div>
-        <h3 id="pmTitle" class="text-xl font-semibold"></h3>
-        <div id="pmPrice" class="text-slate-600 mt-1"></div>
+  <!-- 用 flex 置中，同時保留容器本身可捲動 -->
+  <div class="relative z-10 min-h-full flex items-start justify-center py-6 px-3">
+    <div class="w-full max-w-2xl card bg-white p-6 max-h-[85vh] scroll-y"> <!-- 卡片本身也可捲 -->
+      <div class="flex items-start justify-between">
+        <div>
+          <h3 id="pmTitle" class="text-xl font-semibold"></h3>
+          <div id="pmPrice" class="text-slate-600 mt-1"></div>
+        </div>
+        <button id="pmClose" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
       </div>
-      <button id="pmClose" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
-    </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-      <div>
-        <label class="text-sm text-slate-600">辣度</label>
-        <select id="pmSpice" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900"></select>
-      </div>
-      <div>
-        <label class="text-sm text-slate-600">數量</label>
-        <div class="mt-1 flex items-center gap-2">
-          <button id="pmDec" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">-</button>
-          <input id="pmQty" type="number" min="1" value="1" class="w-20 text-center border border-slate-300 rounded-xl py-2 bg-white text-slate-900" />
-          <button id="pmInc" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">+</button>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div>
+          <label class="text-sm text-slate-600">辣度</label>
+          <select id="pmSpice" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900"></select>
+        </div>
+        <div>
+          <label class="text-sm text-slate-600">數量</label>
+          <div class="mt-1 flex items-center gap-2">
+            <button id="pmDec" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">-</button>
+            <input id="pmQty" type="number" min="1" value="1" class="w-20 text-center border border-slate-300 rounded-xl py-2 bg-white text-slate-900" />
+            <button id="pmInc" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">+</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="mt-5">
-      <label class="text-sm text-slate-600">加點（單點）</label>
-      <div id="pmExtras" class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3"></div>
-      <p class="text-xs text-slate-500 mt-1">單點數量不會跟著火鍋數量倍增，若需相同份數請自行調整。</p>
-    </div>
-
-    <div class="mt-5">
-      <label class="text-sm text-slate-600">備註（選填）</label>
-      <input id="pmNote" type="text" placeholder="例如：不要蔥、湯多一點"
-             class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
-    </div>
-
-    <div class="mt-6 flex items-center justify-between">
-      <div class="text-lg">
-        小計：
-        <span id="pmSubtotal" class="font-semibold mono">$0</span>
+      <div class="mt-5">
+        <label class="text-sm text-slate-600">加點（單點）</label>
+        <div id="pmExtras" class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+        <p class="text-xs text-slate-500 mt-1">單點數量不會跟著火鍋數量倍增，若需相同份數請自行調整。</p>
       </div>
-      <button id="pmAdd" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">加入購物車</button>
+
+      <div class="mt-5">
+        <label class="text-sm text-slate-600">備註（選填）</label>
+        <input id="pmNote" type="text" placeholder="例如：不要蔥、湯多一點"
+               class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
+      </div>
+
+      <div class="mt-6 flex items-center justify-between">
+        <div class="text-lg">
+          小計：<span id="pmSubtotal" class="font-semibold mono">$0</span>
+        </div>
+        <button id="pmAdd" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">加入購物車</button>
+      </div>
     </div>
   </div>
 </div>
+
 
 <footer class="border-t border-slate-200 mt-12">
   <div class="mx-auto container-slim px-4 py-6 text-sm text-slate-600">
@@ -301,11 +305,13 @@ function openPotModal(pot){
     row.querySelector('.inc').addEventListener('click', ()=> qty.value = Math.max(0,(parseInt(qty.value)||0)+1));
     qty.addEventListener('input', updatePmSubtotal);
     ex.appendChild(row);
+    document.body.classList.add('overflow-hidden'); // 防止背景頁卷動
+    el('#potModal').classList.remove('hidden');
   });
   updatePmSubtotal();
   el('#potModal').classList.remove('hidden');
 }
-function closePotModal(){ el('#potModal').classList.add('hidden'); pmCurrent=null; }
+function closePotModal(){ el('#potModal').classList.add('hidden'); document.body.classList.remove('overflow-hidden'); pmCurrent=null; }
 function updatePmSubtotal(){
   if(!pmCurrent) return;
   const potQty = Math.max(1, parseInt(el('#pmQty').value)||1);
