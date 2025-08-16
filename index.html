@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>326臭臭鍋 線上點餐</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- 僅亮色，避免 iOS 原生 select/input 黑底看不到字 -->
   <meta name="color-scheme" content="light">
   <style>
     .card{border-radius:1rem}.btn{border-radius:1rem}.badge{border-radius:999px}
@@ -13,6 +12,7 @@
     input,select,textarea,option,button{color-scheme:light}
     input,select,textarea{background:#fff!important;color:#0f172a!important;-webkit-text-fill-color:#0f172a;border-color:#cbd5e1}
     select option{background:#fff;color:#0f172a}
+    /* 讓 Modal 能在手機上下滑 */
     .scroll-y{overflow-y:auto;-webkit-overflow-scrolling:touch}
   </style>
 
@@ -112,15 +112,13 @@
 </div>
 
 <!-- 火鍋細項 Modal（辣度、數量、單點、備註） -->
-<div id="potModal" class="fixed inset-0 z-40 hidden scroll-y">  <!-- 這裡加 scroll-y -->
+<div id="potModal" class="fixed inset-0 z-40 hidden scroll-y">
   <div class="absolute inset-0 bg-black/40"></div>
-  <!-- 用 flex 置中，同時保留容器本身可捲動 -->
   <div class="relative z-10 min-h-full flex items-start justify-center py-6 px-3">
-    <div class="w-full max-w-2xl card bg-white p-6 max-h-[85vh] scroll-y"> <!-- 卡片本身也可捲 -->
+    <div class="w-full max-w-2xl card bg-white p-6 max-h-[85vh] scroll-y">
       <div class="flex items-start justify-between">
         <div>
           <h3 id="pmTitle" class="text-xl font-semibold"></h3>
-          <div id="pmPrice" class="text-slate-600 mt-1"></div>
         </div>
         <button id="pmClose" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
       </div>
@@ -162,6 +160,24 @@
   </div>
 </div>
 
+<!-- 進站公告 -->
+<div id="noticeModal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/40"></div>
+  <div class="relative z-10 mx-auto mt-16 w-[92%] max-w-xl card bg-white p-6">
+    <h3 class="text-xl font-semibold mb-3">公告</h3>
+    <ul class="list-disc pl-5 space-y-1 text-slate-800">
+      <li>一律不附白飯／冬粉／科學麵</li>
+      <li>夏天不能加菜及換菜</li>
+      <li>一律不附醬料</li>
+      <li>限現金</li>
+      <li>請勿提早到（不好停車）</li>
+      <li>僅限外帶</li>
+    </ul>
+    <div class="mt-5 flex justify-end">
+      <button id="noticeClose" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">我知道了</button>
+    </div>
+  </div>
+</div>
 
 <footer class="border-t border-slate-200 mt-12">
   <div class="mx-auto container-slim px-4 py-6 text-sm text-slate-600">
@@ -197,12 +213,16 @@ const POTS = [
   { id:"牛雜鍋",   name:"牛雜鍋",   price:150, capacityUnits:1, spiceOpts:SPICE },
   { id:"大腸鴨血鍋", name:"大腸鴨血鍋", price:140, capacityUnits:1, spiceOpts:SPICE },
 ];
+/* 加點清單：已移除「高麗菜(冬)」 */
 const EXTRAS = [
   { id:"蟹肉棒", price:20 },{ id:"鱈魚丸", price:20 },{ id:"北海翅", price:20 },{ id:"鑫鑫腸", price:20 },
-  { id:"高麗菜(冬)", price:20 },{ id:"金針菇", price:10 },{ id:"臭豆腐", price:20 },{ id:"貢丸", price:20 },
-  { id:"魚餃", price:20 },{ id:"燕餃", price:20 },{ id:"黑輪", price:20 },{ id:"米血", price:20 },
-  { id:"鴨血", price:20 },{ id:"蝦球", price:20 },{ id:"大腸", price:50 },{ id:"豆皮", price:30 },
+  { id:"金針菇", price:10 },{ id:"臭豆腐", price:20 },{ id:"貢丸", price:20 },{ id:"魚餃", price:20 },
+  { id:"燕餃", price:20 },{ id:"黑輪", price:20 },{ id:"米血", price:20 },{ id:"鴨血", price:20 },
+  { id:"蝦球", price:20 },{ id:"大腸", price:50 },{ id:"豆皮", price:30 },
 ];
+/* 牛雜鍋限定可加點 */
+const BEEF_TRIPES_ALLOWED = ["豆皮","臭豆腐","鴨血","金針菇"];
+
 const SIDES = [
   { id:"白飯", price:10 },{ id:"冬粉", price:10 },{ id:"科學麵", price:15 },
 ];
@@ -278,16 +298,20 @@ function renderSides(){
 let pmCurrent = null;
 function openPotModal(pot){
   pmCurrent = pot;
+  document.body.classList.add('overflow-hidden');
+
   el('#pmTitle').textContent = pot.name;
-  el('#pmPrice').textContent = money(pot.price);
   // 辣度
   const sp = el('#pmSpice'); sp.innerHTML='';
   pot.spiceOpts.forEach(s => { const o=document.createElement('option'); o.value=s; o.textContent=s; sp.appendChild(o); });
   // 數量/備註
   el('#pmQty').value = 1; el('#pmNote').value = '';
-  // 單點
+  // 單點（牛雜鍋僅能加指定品項）
   const ex = el('#pmExtras'); ex.innerHTML='';
-  EXTRAS.forEach(e=>{
+  const extrasList = pot.id === '牛雜鍋'
+    ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id))
+    : EXTRAS;
+  extrasList.forEach(e=>{
     const row=document.createElement('div');
     row.className='flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2';
     row.innerHTML=`
@@ -305,18 +329,26 @@ function openPotModal(pot){
     row.querySelector('.inc').addEventListener('click', ()=> qty.value = Math.max(0,(parseInt(qty.value)||0)+1));
     qty.addEventListener('input', updatePmSubtotal);
     ex.appendChild(row);
-    document.body.classList.add('overflow-hidden'); // 防止背景頁卷動
-    el('#potModal').classList.remove('hidden');
   });
   updatePmSubtotal();
   el('#potModal').classList.remove('hidden');
 }
-function closePotModal(){ el('#potModal').classList.add('hidden'); document.body.classList.remove('overflow-hidden'); pmCurrent=null; }
+function closePotModal(){
+  el('#potModal').classList.add('hidden');
+  document.body.classList.remove('overflow-hidden');
+  pmCurrent=null;
+}
 function updatePmSubtotal(){
   if(!pmCurrent) return;
   const potQty = Math.max(1, parseInt(el('#pmQty').value)||1);
   let subtotal = pmCurrent.price * potQty;
-  el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{ subtotal += EXTRAS[i].price * Math.max(0,parseInt(q.value)||0); });
+  el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{
+    const n = Math.max(0, parseInt(q.value)||0);
+    const list = pmCurrent.id === '牛雜鍋'
+      ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id))
+      : EXTRAS;
+    subtotal += list[i].price * n;
+  });
   el('#pmSubtotal').textContent = money(subtotal);
 }
 
@@ -501,6 +533,16 @@ function populateEarliestTimeOptions(){
   });
 }
 
+/* ===== 公告 ===== */
+function openNotice(){
+  document.body.classList.add('overflow-hidden');
+  el('#noticeModal').classList.remove('hidden');
+}
+function closeNotice(){
+  el('#noticeModal').classList.add('hidden');
+  document.body.classList.remove('overflow-hidden');
+}
+
 /* ===== 啟動 ===== */
 document.addEventListener('DOMContentLoaded', async ()=>{
   try{
@@ -519,9 +561,20 @@ document.addEventListener('DOMContentLoaded', async ()=>{
       const qty = Math.max(1, parseInt(el('#pmQty').value)||1);
       const spice = el('#pmSpice').value;
       const note = el('#pmNote').value.trim();
-      const extras = []; el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{ const n=Math.max(0,parseInt(q.value)||0); if(n>0) extras.push({ id:EXTRAS[i].id, price:EXTRAS[i].price, qty:n }); });
+      const extras = [];
+      const list = pmCurrent.id === '牛雜鍋'
+        ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id))
+        : EXTRAS;
+      el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{
+        const n = Math.max(0, parseInt(q.value)||0);
+        if(n>0) extras.push({ id:list[i].id, price:list[i].price, qty:n });
+      });
       addPotToCart({ pot: pmCurrent, spice, qty, note, extras });
     });
+
+    // 公告
+    openNotice();
+    el('#noticeClose').addEventListener('click', closeNotice);
 
     try{ state.ordersCache = await apiList(todayIso()); }catch(_){}
     el('#clearCart').addEventListener('click', ()=>{ state.cart=[]; renderCart(); });
