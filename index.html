@@ -15,7 +15,6 @@
     .scroll-y{overflow-y:auto;-webkit-overflow-scrolling:touch}
   </style>
 
-  <!-- Day.js + plugins（台北時區） -->
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
@@ -43,20 +42,17 @@
 </header>
 
 <main class="mx-auto container-slim px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-  <!-- 左：菜單 -->
   <section class="lg:col-span-2 space-y-8">
     <div class="space-y-3">
       <h2 class="text-lg font-semibold">火鍋</h2>
       <div id="potList" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
     </div>
-
     <div class="space-y-3">
       <h2 class="text-lg font-semibold">主食</h2>
       <div id="sideList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
     </div>
   </section>
 
-  <!-- 右：購物車 -->
   <aside id="cart" class="space-y-6">
     <div class="card bg-white p-5 sticky top-[88px]">
       <h2 class="text-lg font-semibold mb-4">購物車</h2>
@@ -94,7 +90,6 @@
   </aside>
 </main>
 
-<!-- 成功視窗 -->
 <div id="successModal" class="fixed inset-0 z-40 hidden">
   <div class="absolute inset-0 bg-black/40"></div>
   <div class="relative z-10 mx-auto mt-24 w-[92%] max-w-xl card bg-white p-6">
@@ -107,15 +102,12 @@
   </div>
 </div>
 
-<!-- 火鍋細項 Modal（辣度、數量、單點、備註） -->
 <div id="potModal" class="fixed inset-0 z-40 hidden scroll-y">
   <div class="absolute inset-0 bg-black/40"></div>
   <div class="relative z-10 min-h-full flex items-start justify-center py-6 px-3">
     <div class="w-full max-w-2xl card bg-white p-6 max-h-[85vh] scroll-y">
       <div class="flex items-start justify-between">
-        <div>
-          <h3 id="pmTitle" class="text-xl font-semibold"></h3>
-        </div>
+        <h3 id="pmTitle" class="text-xl font-semibold"></h3>
         <button id="pmClose" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
       </div>
 
@@ -147,16 +139,13 @@
       </div>
 
       <div class="mt-6 flex items-center justify-between">
-        <div class="text-lg">
-          小計：<span id="pmSubtotal" class="font-semibold mono">$0</span>
-        </div>
+        <div class="text-lg">小計：<span id="pmSubtotal" class="font-semibold mono">$0</span></div>
         <button id="pmAdd" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">加入購物車</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- 進站公告 -->
 <div id="noticeModal" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-black/40"></div>
   <div class="relative z-10 mx-auto mt-16 w-[92%] max-w-xl card bg-white p-6">
@@ -185,20 +174,16 @@
 </footer>
 
 <script>
-/* ===== API 端點與 Key ===== */
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxvRLFEEufoN3dIwyBeTZp315vWdmxZYL4cqEubJf6Gcy7voEKw0UNbZ25q3_7KLTQERw/exec';
 const API_KEY  = '326hotpot326';
 
-/* ===== 店舖設定 ===== */
 const STORE = {
   openHour: 16, openMinute: 30,
   closeHour: 20, closeMinute: 30,
-  slotMinutes: 15,
-  slotCapacity: 7,
+  slotMinutes: 15, slotCapacity: 7,
   prepBufferMinutes: 20
 };
 
-/* ===== 菜單 ===== */
 const SPICE = ["無辣","小辣","中辣","大辣"];
 const POTS = [
   { id:"臭臭鍋",   name:"臭臭鍋",   price:100, capacityUnits:1, spiceOpts:SPICE },
@@ -209,7 +194,6 @@ const POTS = [
   { id:"牛雜鍋",   name:"牛雜鍋",   price:150, capacityUnits:1, spiceOpts:SPICE },
   { id:"大腸鴨血鍋", name:"大腸鴨血鍋", price:140, capacityUnits:1, spiceOpts:SPICE },
 ];
-/* 移除高麗菜(冬)；牛雜鍋僅能加：豆皮、臭豆腐、鴨血、金針菇 */
 const EXTRAS = [
   { id:"蟹肉棒", price:20 },{ id:"鱈魚丸", price:20 },{ id:"北海翅", price:20 },{ id:"鑫鑫腸", price:20 },
   { id:"金針菇", price:10 },{ id:"臭豆腐", price:20 },{ id:"貢丸", price:20 },{ id:"魚餃", price:20 },
@@ -217,16 +201,11 @@ const EXTRAS = [
   { id:"蝦球", price:20 },{ id:"大腸", price:50 },{ id:"豆皮", price:30 },
 ];
 const BEEF_TRIPES_ALLOWED = ["豆皮","臭豆腐","鴨血","金針菇"];
+const SIDES = [{ id:"白飯", price:10 },{ id:"冬粉", price:10 },{ id:"科學麵", price:15 }];
 
-const SIDES = [
-  { id:"白飯", price:10 },{ id:"冬粉", price:10 },{ id:"科學麵", price:15 },
-];
-
-/* ===== 狀態 ===== */
 const el = s => document.querySelector(s);
 const state = { cart: [], ordersCache: [] };
 
-/* ===== 小工具 ===== */
 const pad2 = n => String(n).padStart(2,'0');
 const money = n => '$' + Number(n||0).toLocaleString('zh-Hant');
 const todayIso = () => dayjs().tz().format('YYYY-MM-DD');
@@ -239,10 +218,9 @@ function generateSlots(dateStr){
   const arr=[]; for(let t=start.clone(); t.isBefore(end); t=t.add(STORE.slotMinutes,'minute')) arr.push(t.toDate()); return arr;
 }
 
-/* ===== 渲染：火鍋 & 主食 ===== */
+/* Render pots & sides */
 function renderPots(){
-  const root = el('#potList'); if(!root) return;
-  root.innerHTML='';
+  const root = el('#potList'); root.innerHTML='';
   POTS.forEach(p=>{
     const card = document.createElement('div');
     card.className = 'card bg-white p-4 flex flex-col';
@@ -254,15 +232,13 @@ function renderPots(){
       <div class="mt-3 text-sm text-slate-600">點選以選擇辣度、單點、備註</div>
       <div class="mt-4 flex justify-end">
         <button class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">選擇</button>
-      </div>
-    `;
+      </div>`;
     card.querySelector('button').addEventListener('click', ()=> openPotModal(p));
     root.appendChild(card);
   });
 }
 function renderSides(){
-  const root = el('#sideList'); if(!root) return;
-  root.innerHTML='';
+  const root = el('#sideList'); root.innerHTML='';
   SIDES.forEach(s=>{
     const row = document.createElement('div');
     row.className = 'card bg-white p-4 flex items-center justify-between gap-3';
@@ -276,8 +252,7 @@ function renderSides(){
         <input type="number" min="1" value="1" class="qty w-16 text-center border border-slate-300 rounded-xl py-2 bg-white text-slate-900" />
         <button class="inc btn px-3 py-2 border border-slate-300 hover:bg-slate-100">+</button>
         <button class="add btn px-3 py-2 bg-slate-900 text-white hover:bg-slate-800">加入</button>
-      </div>
-    `;
+      </div>`;
     const qty = row.querySelector('.qty');
     row.querySelector('.dec').addEventListener('click', ()=> qty.value = Math.max(1,(parseInt(qty.value)||1)-1));
     row.querySelector('.inc').addEventListener('click', ()=> qty.value = Math.max(1,(parseInt(qty.value)||1)+1));
@@ -286,29 +261,20 @@ function renderSides(){
   });
 }
 
-/* ===== Modal：火鍋細項 ===== */
+/* Modal */
 let pmCurrent = null;
 function openPotModal(pot){
-  pmCurrent = pot;
-  document.body.classList.add('overflow-hidden');
-
+  pmCurrent = pot; document.body.classList.add('overflow-hidden');
   el('#pmTitle').textContent = pot.name;
-  const sp = el('#pmSpice'); sp.innerHTML='';
-  pot.spiceOpts.forEach(s => { const o=document.createElement('option'); o.value=s; o.textContent=s; sp.appendChild(o); });
+  const sp = el('#pmSpice'); sp.innerHTML=''; pot.spiceOpts.forEach(s => { const o=document.createElement('option'); o.value=s; o.textContent=s; sp.appendChild(o); });
   el('#pmQty').value = 1; el('#pmNote').value = '';
-
   const ex = el('#pmExtras'); ex.innerHTML='';
-  const extrasList = pot.id === '牛雜鍋'
-    ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id))
-    : EXTRAS;
+  const extrasList = pot.id === '牛雜鍋' ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id)) : EXTRAS;
   extrasList.forEach(e=>{
     const row=document.createElement('div');
     row.className='flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2';
     row.innerHTML=`
-      <div class="min-w-0">
-        <div class="font-medium">${e.id}</div>
-        <div class="text-xs text-slate-600 mono">${money(e.price)}</div>
-      </div>
+      <div class="min-w-0"><div class="font-medium">${e.id}</div><div class="text-xs text-slate-600 mono">${money(e.price)}</div></div>
       <div class="flex items-center gap-2">
         <button class="dec btn px-2 py-1 border border-slate-300 hover:bg-slate-100">-</button>
         <input type="number" min="0" value="0" class="exQty w-16 text-center border border-slate-300 rounded-xl py-1 bg-white text-slate-900" />
@@ -323,37 +289,24 @@ function openPotModal(pot){
   updatePmSubtotal();
   el('#potModal').classList.remove('hidden');
 }
-function closePotModal(){
-  el('#potModal').classList.add('hidden');
-  document.body.classList.remove('overflow-hidden');
-  pmCurrent=null;
-}
+function closePotModal(){ el('#potModal').classList.add('hidden'); document.body.classList.remove('overflow-hidden'); pmCurrent=null; }
 function updatePmSubtotal(){
   if(!pmCurrent) return;
   const potQty = Math.max(1, parseInt(el('#pmQty').value)||1);
   let subtotal = pmCurrent.price * potQty;
-  const list = pmCurrent.id === '牛雜鍋'
-    ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id))
-    : EXTRAS;
-  el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{
-    subtotal += list[i].price * Math.max(0, parseInt(q.value)||0);
-  });
+  const list = pmCurrent.id === '牛雜鍋' ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id)) : EXTRAS;
+  el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{ subtotal += list[i].price * Math.max(0, parseInt(q.value)||0); });
   el('#pmSubtotal').textContent = money(subtotal);
 }
 
-/* ===== 購物車 ===== */
+/* Cart */
 function addPotToCart(bundle){ state.cart.push({ type:'pot', ...bundle }); renderCart(); closePotModal(); }
 function addSideToCart(side, qty){ state.cart.push({ type:'side', item:{ id:side.id, price:side.price, name:side.id }, qty }); renderCart(); }
 function removeCartEntry(index){ state.cart.splice(index,1); renderCart(); }
 function cartTotal(){
-  return state.cart.reduce((sum,e)=>{
-    if(e.type==='pot'){
-      const extras = e.extras.reduce((s,x)=> s + x.price*x.qty, 0);
-      return sum + e.pot.price*e.qty + extras;
-    } else {
-      return sum + e.item.price*e.qty;
-    }
-  },0);
+  return state.cart.reduce((sum,e)=> e.type==='pot'
+    ? sum + e.pot.price*e.qty + e.extras.reduce((s,x)=> s + x.price*x.qty, 0)
+    : sum + e.item.price*e.qty, 0);
 }
 function renderCart(){
   const root = el('#cartItems'); root.innerHTML='';
@@ -399,10 +352,10 @@ function renderCart(){
     }
     root.appendChild(div);
   });
-  el('#cartTotal').textContent = money(cartTotal()));
+  el('#cartTotal').textContent = money(cartTotal());  /* ← 修正：移除多餘的 ) */
 }
 
-/* ===== API ===== */
+/* API */
 async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000){
   const ctrl = new AbortController(); const timer=setTimeout(()=>ctrl.abort(), timeoutMs);
   try{ return await fetch(resource, { ...options, signal: ctrl.signal }); }
@@ -418,7 +371,7 @@ async function apiCreate(order){
   if(!d.ok) throw new Error('server:'+(d.error||'create_failed')+ (d.message?(':'+d.message):'')); return d;
 }
 
-/* ===== 訂位計算 ===== */
+/* Slot helpers */
 function bookedCapacityMap(dateStr){
   const map={}; (state.ordersCache||[]).filter(o=>o.date===dateStr).forEach(o=>{ const k=slotKey(new Date(o.assignedSlot)); map[k]=(map[k]||0)+(o.capacityUnits||0); }); return map;
 }
@@ -437,7 +390,7 @@ function isSlotAvailable(dateStr, slotDate, needUnits){
   return used + needUnits <= STORE.slotCapacity;
 }
 
-/* ===== 送單 ===== */
+/* Submit */
 async function onSubmitOrder(e){
   e.preventDefault();
   const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -472,21 +425,18 @@ async function onSubmitOrder(e){
     }
     const rounded = roundUpToSlot(earliest.toDate(), STORE.slotMinutes);
 
-    // 先抓該天訂單
     try{ state.ordersCache = await apiList(dateStr); }catch(_){ await new Promise(r=>setTimeout(r,800)); state.ordersCache = await apiList(dateStr); }
 
     let slot = null;
     const needUnits = cartCapacityUnits();
 
     if (sel) {
-      // 使用者有選時段：只檢查該時段，不再自動延後
       if (!isSlotAvailable(dateStr, rounded, needUnits)) {
         showErr(`您選擇的 ${slotKey(rounded)} 時段已額滿，請改選其他取餐時間。`);
         return;
       }
       slot = rounded;
     } else {
-      // 未選時段：維持原本自動安排（可延到隔天第一個時段）
       slot = autoAssignSlot(dateStr, rounded);
       if (!slot) {
         const tmr = dayjs.tz(dateStr,'YYYY-MM-DD','Asia/Taipei').add(1,'day').format('YYYY-MM-DD');
@@ -498,7 +448,6 @@ async function onSubmitOrder(e){
       if (!slot) { showErr('近期可用時段已滿，請改天或來電訂餐。'); return; }
     }
 
-    // 組訂單
     const items = [];
     state.cart.forEach(e=>{
       if(e.type==='pot'){
@@ -529,71 +478,54 @@ async function onSubmitOrder(e){
   }catch(err){
     console.error('submit_failed', err);
     const m = String(err && err.message || '');
-    if (m.includes('timeout')) el('#formError').textContent='連線逾時，請再試一次。';
-    else if (m.startsWith('bad_json')) el('#formError').textContent='伺服器回應格式異常：' + m.slice(8);
-    else if (m.includes('server:unauthorized')) el('#formError').textContent='伺服器拒絕：金鑰或權限不符。';
-    else if (m.startsWith('server:exception')) el('#formError').textContent='伺服器內部錯誤：' + m.replace(/^server:/,'');
-    else el('#formError').textContent='送單失敗：' + m.replace(/^server:/,'');
+    if (m.includes('timeout')) showErr('連線逾時，請再試一次。');
+    else if (m.startsWith('bad_json')) showErr('伺服器回應格式異常：' + m.slice(8));
+    else if (m.includes('server:unauthorized')) showErr('伺服器拒絕：金鑰或權限不符。');
+    else if (m.startsWith('server:exception')) showErr('伺服器內部錯誤：' + m.replace(/^server:/,''));
+    else showErr('送單失敗：' + m.replace(/^server:/,''));
   }finally{ setBusy(false); }
 }
 
-/* ===== 取餐時段選單 ===== */
+/* Earliest options */
 function populateEarliestTimeOptions(){
   const sel = el('#earliestTime'); const dateStr = todayIso();
   sel.innerHTML = '<option value="">不指定（系統自動安排）</option>';
-  generateSlots(dateStr).forEach(s=>{
-    const label = slotKey(s); const o=document.createElement('option'); o.value=label; o.textContent=label; sel.appendChild(o);
-  });
+  generateSlots(dateStr).forEach(s=>{ const label = slotKey(s); const o=document.createElement('option'); o.value=label; o.textContent=label; sel.appendChild(o); });
 }
 
-/* ===== 公告 ===== */
+/* Notice */
 function openNotice(){ document.body.classList.add('overflow-hidden'); el('#noticeModal').classList.remove('hidden'); }
 function closeNotice(){ el('#noticeModal').classList.add('hidden'); document.body.classList.remove('overflow-hidden'); }
 
-/* ===== 啟動 ===== */
+/* Init */
 document.addEventListener('DOMContentLoaded', async ()=>{
-  try{
-    renderPots();
-    renderSides();
-    renderCart();
-    populateEarliestTimeOptions();
-    el('#year').textContent = new Date().getFullYear();
+  renderPots(); renderSides(); renderCart(); populateEarliestTimeOptions();
+  el('#year').textContent = new Date().getFullYear();
 
-    // Modal 互動
-    el('#pmDec').addEventListener('click', ()=>{ const q=el('#pmQty'); q.value=Math.max(1,(parseInt(q.value)||1)-1); updatePmSubtotal(); });
-    el('#pmInc').addEventListener('click', ()=>{ const q=el('#pmQty'); q.value=Math.max(1,(parseInt(q.value)||1)+1); updatePmSubtotal(); });
-    el('#pmQty').addEventListener('input', updatePmSubtotal);
-    el('#pmClose').addEventListener('click', closePotModal);
-    el('#pmAdd').addEventListener('click', ()=>{
-      const qty = Math.max(1, parseInt(el('#pmQty').value)||1);
-      const spice = el('#pmSpice').value;
-      const note = el('#pmNote').value.trim();
-      const extras = [];
-      const list = pmCurrent.id === '牛雜鍋'
-        ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id))
-        : EXTRAS;
-      el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{
-        const n = Math.max(0, parseInt(q.value)||0);
-        if(n>0) extras.push({ id:list[i].id, price:list[i].price, qty:n });
-      });
-      addPotToCart({ pot: pmCurrent, spice, qty, note, extras });
+  el('#pmDec').addEventListener('click', ()=>{ const q=el('#pmQty'); q.value=Math.max(1,(parseInt(q.value)||1)-1); updatePmSubtotal(); });
+  el('#pmInc').addEventListener('click', ()=>{ const q=el('#pmQty'); q.value=Math.max(1,(parseInt(q.value)||1)+1); updatePmSubtotal(); });
+  el('#pmQty').addEventListener('input', updatePmSubtotal);
+  el('#pmClose').addEventListener('click', closePotModal);
+  el('#pmAdd').addEventListener('click', ()=>{
+    const qty = Math.max(1, parseInt(el('#pmQty').value)||1);
+    const spice = el('#pmSpice').value;
+    const note = el('#pmNote').value.trim();
+    const extras = [];
+    const list = pmCurrent.id === '牛雜鍋' ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id)) : EXTRAS;
+    el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{
+      const n = Math.max(0, parseInt(q.value)||0);
+      if(n>0) extras.push({ id:list[i].id, price:list[i].price, qty:n });
     });
+    addPotToCart({ pot: pmCurrent, spice, qty, note, extras });
+  });
 
-    // 公告
-    openNotice();
-    el('#noticeClose').addEventListener('click', closeNotice);
+  openNotice();
+  el('#noticeClose').addEventListener('click', closeNotice);
 
-    try{ state.ordersCache = await apiList(todayIso()); }catch(_){}
-    el('#clearCart').addEventListener('click', ()=>{ state.cart=[]; renderCart(); });
-    el('#checkoutForm').addEventListener('submit', onSubmitOrder);
-    el('#closeSuccess').addEventListener('click', ()=> el('#successModal').classList.add('hidden'));
-  }catch(err){
-    console.error('init_failed', err);
-    const warn = document.createElement('div');
-    warn.className='mx-auto container-slim px-4';
-    warn.innerHTML = `<div class="card bg-red-50 border border-red-200 text-red-800 p-4 mt-4">初始化失敗：${String(err&&err.message||err)}</div>`;
-    document.body.prepend(warn);
-  }
+  try{ state.ordersCache = await apiList(todayIso()); }catch(_){}
+  el('#clearCart').addEventListener('click', ()=>{ state.cart=[]; renderCart(); });
+  el('#checkoutForm').addEventListener('submit', onSubmitOrder);
+  el('#closeSuccess').addEventListener('click', ()=> el('#successModal').classList.add('hidden'));
 });
 </script>
 </body>
