@@ -74,8 +74,8 @@
     </div>
   </section>
 
-  <!-- 彙總 -->
-  <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <!-- 彙總（新增：牛雜鍋剩餘） -->
+  <section class="grid grid-cols-1 md:grid-cols-4 gap-4">
     <div class="card bg-white p-4">
       <div class="text-sm text-slate-600">訂單數</div>
       <div id="sumOrders" class="text-2xl font-semibold mono">0</div>
@@ -87,6 +87,11 @@
     <div class="card bg-white p-4">
       <div class="text-sm text-slate-600">銷售金額</div>
       <div id="sumRevenue" class="text-2xl font-semibold mono">$0</div>
+    </div>
+    <div class="card bg-white p-4">
+      <div class="text-sm text-slate-600">牛雜鍋剩餘</div>
+      <div id="sumTripeLeft" class="text-2xl font-semibold mono">—</div>
+      <div id="sumTripeNote" class="text-xs text-slate-500 mt-1"></div>
     </div>
   </section>
 
@@ -134,10 +139,13 @@ const API_KEY  = '326hotpot326';
 // 簡易密碼（可配合網址 ?pass=xxxxx）
 const OWNER_PASS = '326';
 
-// 營運設定（僅供容量顯示）
+// 容量顯示
 const STORE = { slotCapacity: 7 };
 
-/* ===== Debug 開關（網址帶 ?debug=1 啟用） ===== */
+// 限量商品（需與後端一致）
+const LIMIT_ITEM_ID = '牛雜鍋';
+
+/* ===== Debug 開關 ===== */
 const DEBUG = /[?&]debug=1/.test(location.search);
 const dlog = (...a) => { if (DEBUG) console.log('[owner]', ...a); };
 
@@ -163,6 +171,7 @@ async function fetchJson(url, options = {}, timeoutMs = 15000) {
 }
 
 /* ===== 後端 API ===== */
+// 取得整包資料（含 orders 與 limits）
 async function apiList(dateStr){
   const url = new URL(ENDPOINT);
   url.searchParams.set('action','list');
@@ -173,7 +182,7 @@ async function apiList(dateStr){
   dlog('apiList response ←', data);
   if (!data.ok) throw new Error(data.error || 'list_failed');
   updateDebugPanel({ lastUrl:url.toString(), lastOk:data.ok, lastError:data.error||'', count:(data.orders||[]).length, raw:JSON.stringify(data,null,2) });
-  return data.orders || [];
+  return data; // 回傳 { ok, orders, limits }
 }
 async function apiDelete(id){
   dlog('apiDelete →', id);
@@ -196,10 +205,10 @@ function sanitizeOrders(list){
       const id = String(o?.id || '');
       const raw = o?.assignedSlot || o?.createdAt || '';
       const d = new Date(raw);
-      if (isNaN(d)) continue; // 無效時間跳過
+      if (isNaN(d)) continue;
       out.push({
         id,
-        pickupNo: Number(o?.pickupNo || 0), // 保留取餐號碼
+        pickupNo: Number(o?.pickupNo || 0),
         assignedSlot: d.toISOString(),
         capacityUnits: Number(o?.capacityUnits || 0),
         customer: { name: String(o?.customer?.name || ''), phone: String(o?.customer?.phone || '') },
@@ -213,15 +222,34 @@ function sanitizeOrders(list){
   }
   return out;
 }
+function readTripeLimits(limits){
+  const info = limits && limits[LIMIT_ITEM_ID];
+  if (!info) return null;
+  return {
+    limit: Number(info.limit || 0),
+    used: Number(info.used || 0),
+    remaining: Math.max(0, Number(info.remaining || 0))
+  };
+}
 
 /* ===== 渲染 ===== */
-function renderSummary(orders){
+function renderSummary(orders, limits){
   const sumOrders = orders.length;
   const sumCapacity = orders.reduce((s,o)=> s + Number(o.capacityUnits||0), 0);
   const sumRevenue = orders.reduce((s,o)=> s + Number(o.total||0), 0);
   el('#sumOrders').textContent = sumOrders;
   el('#sumCapacity').textContent = sumCapacity;
   el('#sumRevenue').textContent = formatCurrency(sumRevenue);
+
+  const tri = readTripeLimits(limits || {});
+  if (tri) {
+    el('#sumTripeLeft').textContent = `${tri.remaining} / ${tri.limit}`;
+    el('#sumTripeLeft').classList.toggle('text-red-600', tri.remaining === 0);
+    el('#sumTripeNote').textContent = `已售 ${tri.used} 份${tri.remaining===0?' ・ 今日已售完':''}`;
+  } else {
+    el('#sumTripeLeft').textContent = '—';
+    el('#sumTripeNote').textContent = '';
+  }
 }
 
 function renderOrders(ordersRaw){
@@ -234,12 +262,11 @@ function renderOrders(ordersRaw){
 
     if (!slots.length){
       root.innerHTML = '<div class="card bg-white p-6 text-slate-600">本日尚無訂單。</div>';
-      renderSummary([]); return;
+      renderSummary([], {}); return;
     }
 
     const frag = document.createDocumentFragment();
     for (const hhmm of slots) {
-      // 以取餐號碼優先排序，其次建立時間
       const arr = groups[hhmm].sort((a,b)=>{
         const ap=a.pickupNo||0, bp=b.pickupNo||0;
         if (ap && bp && ap!==bp) return ap-bp;
@@ -303,7 +330,6 @@ function renderOrders(ordersRaw){
       });
     });
 
-    renderSummary(orders);
   }catch(err){
     console.error('renderOrders_error', err);
     el('#slotList').innerHTML = `<div class="card bg-white p-6 text-red-600">渲染失敗：${String(err?.message || err)}</div>`;
@@ -311,16 +337,21 @@ function renderOrders(ordersRaw){
 }
 
 /* ===== 輪詢與控制 ===== */
-let polling = false, timer = null;
+let polling = false, timer = null, lastLimits = {};
 async function refreshOrders(){
   if (polling) return;
   polling = true;
   const dateStr = el('#dateInput').value || todayYMD();
   dlog('refreshOrders date →', dateStr);
   try{
-    const orders = await apiList(dateStr);
-    dlog('orders len:', orders.length);
+    const data = await apiList(dateStr);       // ← 取得 {orders, limits}
+    const orders = data.orders || [];
+    lastLimits = data.limits || {};
+    dlog('orders len:', orders.length, 'limits:', lastLimits);
+
     renderOrders(orders);
+    renderSummary(sanitizeOrders(orders), lastLimits);
+
     el('#lastSync').textContent = dayjs().tz().format('YYYY-MM-DD HH:mm:ss');
     updateDebugPanel({ lastDate: dateStr, grouped: groupBySlot(orders) });
   }catch(e){
