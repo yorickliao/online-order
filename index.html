@@ -91,12 +91,15 @@
   </aside>
 </main>
 
+<!-- 成功視窗：新增取餐號碼顯示 -->
 <div id="successModal" class="fixed inset-0 z-40 hidden">
   <div class="absolute inset-0 bg-black/40"></div>
   <div class="relative z-10 mx-auto mt-24 w-[92%] max-w-xl card bg-white p-6">
     <h3 class="text-xl font-semibold mb-2">下單成功</h3>
     <p class="text-slate-700">您的取餐時段為：</p>
     <p id="assignedSlotText" class="text-2xl font-bold mt-1"></p>
+    <p class="text-slate-700 mt-3">您的取餐號碼：</p>
+    <p id="pickupNoText" class="text-3xl font-extrabold tracking-wider mt-1"></p>
     <div class="mt-4 flex justify-end">
       <button id="closeSuccess" class="btn px-4 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
     </div>
@@ -201,7 +204,9 @@ const EXTRAS = [
   { id:"燕餃", price:20 },{ id:"黑輪", price:20 },{ id:"米血", price:20 },{ id:"鴨血", price:20 },
   { id:"蝦球", price:20 },{ id:"大腸", price:50 },{ id:"豆皮", price:30 },
 ];
+// 牛雜鍋只能加：豆皮、臭豆腐、鴨血、金針菇
 const BEEF_TRIPES_ALLOWED = ["豆皮","臭豆腐","鴨血","金針菇"];
+
 const SIDES = [{ id:"白飯", price:10 },{ id:"冬粉", price:10 },{ id:"科學麵", price:15 }];
 
 const el = s => document.querySelector(s);
@@ -353,7 +358,7 @@ function renderCart(){
     }
     root.appendChild(div);
   });
-  el('#cartTotal').textContent = money(cartTotal());  /* ← 修正：移除多餘的 ) */
+  el('#cartTotal').textContent = money(cartTotal());
 }
 
 /* API */
@@ -389,6 +394,13 @@ function autoAssignSlot(dateStr, earliest){
 function isSlotAvailable(dateStr, slotDate, needUnits){
   const used = (bookedCapacityMap(dateStr)[slotKey(slotDate)] || 0);
   return used + needUnits <= STORE.slotCapacity;
+}
+
+/* 取餐號碼：前端暫估（同日最大值+1；最終以後端為準） */
+function nextPickupNoForDate(dateStr){
+  const dayOrders = (state.ordersCache || []).filter(o => o.date === dateStr);
+  const maxNo = dayOrders.reduce((m, o) => Math.max(m, Number(o.pickupNo || 0)), 0);
+  return maxNo + 1;
 }
 
 /* Submit */
@@ -471,10 +483,17 @@ async function onSubmitOrder(e){
       source: 'web-customer'
     };
 
-    await apiCreate(order);
+    /* ========= 取餐號碼：前端暫編 + 後端覆蓋 ========= */
+    const tempPickupNo = nextPickupNoForDate(dateStr);
+    order.pickupNo = tempPickupNo;
+
+    const resp = await apiCreate(order);
+    const pickupNo = (resp && (resp.pickupNo || (resp.order && resp.order.pickupNo))) || tempPickupNo;
+    /* ================================================= */
 
     state.cart = []; renderCart();
     el('#assignedSlotText').textContent = dayjs(order.assignedSlot).tz().format('YYYY-MM-DD HH:mm');
+    el('#pickupNoText').textContent = String(pickupNo);
     el('#successModal').classList.remove('hidden');
   }catch(err){
     console.error('submit_failed', err);
