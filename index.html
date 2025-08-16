@@ -192,7 +192,7 @@ const STORE = {
   prepBufferMinutes: 20
 };
 
-// 後端也有設定：牛雜鍋每日 50 份
+// 後端也有設定：牛雜鍋每日限量
 const LIMIT_ITEM_ID = '牛雜鍋';
 
 /* ===== 商品資料 ===== */
@@ -211,9 +211,8 @@ const EXTRAS = [
   { id:"金針菇", price:10 },{ id:"臭豆腐", price:20 },{ id:"貢丸", price:20 },{ id:"魚餃", price:20 },
   { id:"燕餃", price:20 },{ id:"黑輪", price:20 },{ id:"米血", price:20 },{ id:"鴨血", price:20 },
   { id:"蝦球", price:20 },{ id:"大腸", price:50 },{ id:"豆皮", price:30 },
-  { id:"豬肉", price:40 } 
+  { id:"豬肉", price:40 }
 ];
-
 // 牛雜鍋只能加：豆皮、臭豆腐、鴨血、金針菇
 const BEEF_TRIPES_ALLOWED = ["豆皮","臭豆腐","鴨血","金針菇"];
 const SIDES = [{ id:"白飯", price:10 },{ id:"冬粉", price:10 },{ id:"科學麵", price:15 }];
@@ -234,10 +233,10 @@ function generateSlots(dateStr){
   const arr=[]; for(let t=start.clone(); t.isBefore(end); t=t.add(STORE.slotMinutes,'minute')) arr.push(t.toDate()); return arr;
 }
 
-/* ===== 牛雜鍋剩餘量 ===== */
+/* ===== 牛雜鍋剩餘量（不顯示給客人） ===== */
 function tripeRemaining(){
   const info = state.limits && state.limits[LIMIT_ITEM_ID];
-  if (!info) return Infinity; // 後端未提供時視為不限量（保險起見也會在送單時由後端擋）
+  if (!info) return Infinity; // 未取到時不顯示、也不限制（後端會擋）
   return Number(info.remaining || 0);
 }
 
@@ -248,7 +247,7 @@ function renderPots(){
 
   POTS.forEach(p=>{
     const isTripe = p.id === LIMIT_ITEM_ID;
-    const soldOut = isTripe && remain <= 0;
+    const soldOut = isTripe && remain !== Infinity && remain <= 0;
 
     const card = document.createElement('div');
     card.className = 'card bg-white p-4 flex flex-col';
@@ -256,18 +255,19 @@ function renderPots(){
       <div class="flex items-start justify-between gap-3">
         <div>
           <h3 class="text-lg font-semibold">${p.name}</h3>
-          ${isTripe ? `<div class="mt-1 text-sm ${soldOut?'text-red-600':'text-slate-600'}">${soldOut ? '今日已售完' : `今日剩 ${remain} 份`}</div>` : ''}
         </div>
         <div class="text-right font-semibold mono">${money(p.price)}</div>
       </div>
       <div class="mt-3 text-sm text-slate-600">點選以選擇辣度、單點、備註</div>
       <div class="mt-4 flex justify-end">
-        <button class="btn px-4 py-2 ${soldOut?'bg-slate-200 text-slate-500 cursor-not-allowed':'bg-slate-900 text-white hover:bg-slate-800'}">${soldOut?'已售完':'選擇'}</button>
+        <button class="btn px-4 py-2 ${soldOut?'bg-slate-200 text-slate-500 cursor-not-allowed':'bg-slate-900 text-white hover:bg-slate-800'}">
+          ${soldOut?'已售完':'選擇'}
+        </button>
       </div>`;
     const btn = card.querySelector('button');
     btn.disabled = soldOut;
     btn.addEventListener('click', ()=>{
-      if (isTripe && tripeRemaining() <= 0) return; // 再次保險
+      if (soldOut) return;
       openPotModal(p);
     });
     root.appendChild(card);
@@ -305,26 +305,25 @@ function openPotModal(pot){
   el('#pmTitle').textContent = pot.name;
   const sp = el('#pmSpice'); sp.innerHTML=''; pot.spiceOpts.forEach(s => { const o=document.createElement('option'); o.value=s; o.textContent=s; sp.appendChild(o); });
 
-  // 牛雜鍋：顯示剩餘量、限制最大數量
+  // 不顯示剩餘數，只顯示售完 or 限量泛用提示
   const capNote = el('#pmCapNote');
   let maxQty = 9999;
   if (pot.id === LIMIT_ITEM_ID) {
     const remain = tripeRemaining();
-    if (remain <= 0) { // 雙重保險，不應開到這裡
+    if (remain !== Infinity && remain <= 0) {
       capNote.textContent = '本品今日已售完';
       capNote.className = 'text-sm mt-1 text-red-600';
       el('#pmAdd').disabled = true;
     } else {
-      capNote.textContent = `本品今日剩餘 ${remain} 份`;
+      capNote.textContent = '限量供應（以實際庫存為準）';
       capNote.className = 'text-sm mt-1 text-slate-600';
       el('#pmAdd').disabled = false;
-      maxQty = remain;
+      if (remain !== Infinity) maxQty = remain;
     }
   } else {
     capNote.textContent = '';
   }
 
-  // 數量與備註
   const qtyInput = el('#pmQty');
   qtyInput.value = 1;
   qtyInput.min = 1;
@@ -332,9 +331,9 @@ function openPotModal(pot){
   if (maxQty !== 9999) qtyInput.max = String(maxQty);
   el('#pmNote').value = '';
 
-  // 單點清單
+  // 單點清單（牛雜鍋只允許指定加點）
   const ex = el('#pmExtras'); ex.innerHTML='';
-  const extrasList = pot.id === '牛雜鍋' ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id)) : EXTRAS;
+  const extrasList = pot.id === LIMIT_ITEM_ID ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id)) : EXTRAS;
   extrasList.forEach(e=>{
     const row=document.createElement('div');
     row.className='flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2';
@@ -352,7 +351,6 @@ function openPotModal(pot){
     ex.appendChild(row);
   });
 
-  // 調整 + / - 與直接輸入時的上限
   const applyQtyCap = ()=>{
     let v = Math.max(1, parseInt(qtyInput.value)||1);
     if (maxQty !== 9999) v = Math.min(v, maxQty);
@@ -368,8 +366,8 @@ function openPotModal(pot){
     const qty = Math.max(1, parseInt(qtyInput.value)||1);
     if (pmCurrent.id === LIMIT_ITEM_ID) {
       const remainNow = tripeRemaining();
-      if (qty > remainNow) {
-        alert(`牛雜鍋今日剩餘 ${remainNow} 份，請調整數量。`);
+      if (remainNow !== Infinity && qty > remainNow) {
+        alert('牛雜鍋為限量品，剩餘不足，請調整數量。');
         return;
       }
     }
@@ -431,8 +429,10 @@ function renderCart(){
         </div>`;
       div.querySelector('.lineQty').addEventListener('input', ev=>{
         let v=parseInt(ev.target.value)||1; if(v<1)v=1;
-        // 若是牛雜鍋，限制不可超過剩餘 + 已在購物車相同品項的其餘數量（簡化：這裡僅以剩餘量為上限）
-        if (e.pot.id === LIMIT_ITEM_ID) v = Math.min(v, tripeRemaining());
+        if (e.pot.id === LIMIT_ITEM_ID) {
+          const remain = tripeRemaining();
+          if (remain !== Infinity) v = Math.min(v, remain);
+        }
         e.qty=v; renderCart();
       });
       div.querySelector('.remove').addEventListener('click', ()=> removeCartEntry(idx));
@@ -522,12 +522,12 @@ async function onSubmitOrder(e){
     const phone = el('#customerPhone').value.trim();
     if(!name || !phone){ showErr('請完整填寫姓名與電話。'); return; }
 
-    // 若購物車包含牛雜鍋，先做前端預檢
+    // 若購物車包含牛雜鍋，先做前端預檢（不顯示剩餘數）
     const tripeInCart = state.cart.filter(e=> e.type==='pot' && e.pot?.id===LIMIT_ITEM_ID)
                                   .reduce((s,e)=> s + Number(e.qty||0), 0);
     const remainNow = tripeRemaining();
     if (remainNow !== Infinity && tripeInCart > remainNow) {
-      showErr(`牛雜鍋今日剩餘 ${remainNow} 份，請調整數量後再送出。`);
+      showErr('牛雜鍋今日限量已達上限，請調整數量或改點其他品項。');
       return;
     }
 
@@ -603,16 +603,14 @@ async function onSubmitOrder(e){
       items, subtotal, discount: 0, total: subtotal,
       createdAt: new Date().toISOString(),
       source: 'web-customer',
-      // 取餐號碼（暫編，後端會覆蓋）
-      pickupNo: nextPickupNoForDate(dateStr)
+      pickupNo: nextPickupNoForDate(dateStr) // 暫編，後端覆蓋
     };
 
     const resp = await apiCreate(order);
     if (!resp.ok) {
       if (resp.error === 'limit_reached' && resp.itemId === LIMIT_ITEM_ID) {
-        const left = Number(resp.remaining || 0);
-        showErr(`牛雜鍋今日剩餘 ${left} 份，請調整數量或改點其他品項。`);
-        // 重新拉取最新剩餘量，更新 UI
+        showErr('牛雜鍋今日限量已達上限，請調整數量或改點其他品項。');
+        // 重新拉最新狀態，更新 UI（不顯示剩餘數）
         try{
           const data = await apiList(dateStr);
           state.ordersCache = data.orders || [];
@@ -634,7 +632,7 @@ async function onSubmitOrder(e){
     el('#pickupNoText').textContent = String(pickupNo);
     el('#successModal').classList.remove('hidden');
 
-    // 成功後也更新剩餘量，避免其他人超賣
+    // 成功後也更新限量狀態（不顯示剩餘數）
     try{
       const data = await apiList(dateStr);
       state.ordersCache = data.orders || [];
@@ -660,28 +658,29 @@ function populateEarliestTimeOptions(){
   generateSlots(dateStr).forEach(s=>{ const label = slotKey(s); const o=document.createElement('option'); o.value=label; o.textContent=label; sel.appendChild(o); });
 }
 
-/* ===== Notice ===== */
+/* ===== Notice & Init ===== */
 function openNotice(){ document.body.classList.add('overflow-hidden'); el('#noticeModal').classList.remove('hidden'); }
 function closeNotice(){ el('#noticeModal').classList.add('hidden'); document.body.classList.remove('overflow-hidden'); }
 
-/* ===== Init ===== */
-document.addEventListener('DOMContentLoaded', async ()=>{
+document.addEventListener('DOMContentLoaded', ()=>{
   el('#year').textContent = new Date().getFullYear();
-  renderSides(); renderCart(); populateEarliestTimeOptions();
 
-  // 預抓今天訂單與限量，讓牛雜鍋能顯示剩餘/售完
-  try{
-    const data = await apiList(todayIso());
-    state.ordersCache = data.orders || [];
-    state.limits = data.limits || {};
-  }catch(_){}
-  renderPots();
+  // 先畫基本 UI，不等網路
+  renderSides(); renderCart(); populateEarliestTimeOptions(); renderPots();
+  openNotice();
+  el('#noticeClose').addEventListener('click', closeNotice);
+
+  // 背景抓今天的 orders + limits，回來後只更新售完狀態（不顯示剩餘數）
+  apiList(todayIso())
+    .then((data)=>{
+      state.ordersCache = data.orders || [];
+      state.limits = data.limits || {};
+      renderPots();
+    })
+    .catch(()=>{});
 
   // Modal 控制
   el('#pmClose').addEventListener('click', closePotModal);
-
-  openNotice();
-  el('#noticeClose').addEventListener('click', closeNotice);
 
   el('#clearCart').addEventListener('click', ()=>{ state.cart=[]; renderCart(); });
   el('#checkoutForm').addEventListener('submit', onSubmitOrder);
