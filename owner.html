@@ -74,7 +74,7 @@
     </div>
   </section>
 
-  <!-- 彙總（新增：牛雜鍋剩餘） -->
+  <!-- 彙總（含牛雜鍋剩餘） -->
   <section class="grid grid-cols-1 md:grid-cols-4 gap-4">
     <div class="card bg-white p-4">
       <div class="text-sm text-slate-600">訂單數</div>
@@ -133,7 +133,7 @@
 
 <script>
 /* ===== 基本設定 ===== */
-const ENDPOINT = 'https://script.google.com/macros/s/AKfycby1Z4BH_lywZKFmeFzw8DJjeYS2J2h_Uk4YSq4YZyN8zcLTQWvJ4Ux_7jglR9aanNXcjg/exec';
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxjdftXsXItJVhLlWS6AS9cX63yPIhY19no6H6Y3CaCItX1i2niRf0Qh7uo1vD8GcNo2Q/exec';
 const API_KEY  = '326hotpot326';
 
 // 簡易密碼（可配合網址 ?pass=xxxxx）
@@ -195,8 +195,24 @@ async function apiDelete(id){
   updateDebugPanel({ lastUrl:ENDPOINT+' (POST delete)', lastOk:data.ok, lastError:data.error||'', raw:JSON.stringify(data,null,2) });
   return data;
 }
+// ✅ 新增：更新完成狀態
+async function apiUpdate(id, done){
+  dlog('apiUpdate →', id, done);
+  const data = await fetchJson(ENDPOINT, {
+    method:'POST',
+    body: JSON.stringify({ apiKey: API_KEY, action:'update', id, done: !!done })
+  }, 15000);
+  dlog('apiUpdate response ←', data);
+  if (!data.ok) throw new Error(data.error || 'update_failed');
+  return data;
+}
 
 /* ===== 資料清洗 ===== */
+function toBool(x){
+  if (x === true || x === false) return x;
+  const s = String(x||'').trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes' || s === 'y';
+}
 function sanitizeOrders(list){
   if (!Array.isArray(list)) return [];
   const out = [];
@@ -217,6 +233,7 @@ function sanitizeOrders(list){
         discount: Number(o?.discount || 0),
         total: Number(o?.total || 0),
         createdAt: o?.createdAt || d.toISOString(),
+        done: toBool(o?.done)
       });
     } catch(e){ console.warn('sanitizeOrders: skip bad row', o, e); }
   }
@@ -292,7 +309,7 @@ function renderOrders(ordersRaw){
       for (const o of arr) {
         const itemsText = (Array.isArray(o.items)?o.items:[]).map(it => `${it.name}×${it.qty}`).join('、') || '(無品項)';
         const row = document.createElement('div');
-        row.className = 'py-3 flex items-start justify-between gap-4';
+        row.className = `py-3 flex items-start justify-between gap-4 ${o.done ? 'opacity-60' : ''}`;
         row.innerHTML = `
           <div class="min-w-0">
             <div class="font-semibold flex items-center gap-2">
@@ -302,11 +319,16 @@ function renderOrders(ordersRaw){
               <span>${o.customer?.name || ''}</span>
               <a class="text-slate-600 underline" href="tel:${o.customer?.phone || ''}">${o.customer?.phone || ''}</a>
               <span class="ml-2 text-xs text-slate-500">${dayjs(o.createdAt).tz().format('HH:mm:ss')} 建立</span>
+              ${o.done ? '<span class="badge text-xs px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700">已完成</span>' : ''}
             </div>
             <div class="text-sm text-slate-700 mt-1">${itemsText}</div>
             <div class="text-xs text-slate-500">等效數：${Number(o.capacityUnits||0)} ・ 小計：${formatCurrency(o.subtotal||0)} ・ 折扣：${formatCurrency(o.discount||0)} ・ 合計：<span class="mono">${formatCurrency(o.total||0)}</span></div>
           </div>
-          <div class="shrink-0 flex items-center gap-2">
+          <div class="shrink-0 flex items-center gap-3">
+            <label class="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" class="done-toggle scale-110" data-id="${o.id}" ${o.done ? 'checked' : ''}>
+              完成
+            </label>
             <button data-id="${o.id}" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100 btn-delete">刪除</button>
           </div>
         `;
@@ -316,6 +338,25 @@ function renderOrders(ordersRaw){
       frag.appendChild(sec);
     }
     root.appendChild(frag);
+
+    // ✅ 完成/取消 完成
+    root.querySelectorAll('.done-toggle').forEach(chk=>{
+      chk.addEventListener('change', async (e)=>{
+        const id = e.currentTarget.getAttribute('data-id');
+        const done = e.currentTarget.checked;
+        e.currentTarget.disabled = true;
+        try {
+          await apiUpdate(id, done);
+          await refreshOrders();
+        } catch (err) {
+          console.error('update_done_failed', err);
+          alert('更新完成狀態失敗，請稍後再試');
+          e.currentTarget.checked = !done; // 還原
+        } finally {
+          e.currentTarget.disabled = false;
+        }
+      });
+    });
 
     // 刪除事件
     root.querySelectorAll('.btn-delete').forEach(btn=>{
