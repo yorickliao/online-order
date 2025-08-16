@@ -55,18 +55,16 @@
   </section>
 
   <aside id="cart" class="space-y-6">
-    <!-- 購物車卡片（只在 lg sticky，並限制高度） -->
+    <!-- 只在桌機 sticky，並限制高度，內容內捲 -->
     <div class="card bg-white p-5 lg:sticky lg:top-[88px] lg:max-h-[calc(100vh-120px)] lg:flex lg:flex-col lg:overflow-hidden">
       <h2 class="text-lg font-semibold mb-4">購物車</h2>
-      <!-- 讓清單自己捲動（只在 lg 生效也可以，但這樣寫手機也不礙事） -->
-      <div id="cartItems" class="space-y-3 flex-1 overflow-y-auto pr-1"></div>
+      <div id="cartItems" class="space-y-3 flex-1 overflow-y-auto pr-1" style="-webkit-overflow-scrolling: touch;"></div>
       <div class="border-t pt-4 mt-4 flex items-center justify-between text-lg font-semibold">
         <div>總計</div>
         <div id="cartTotal" class="mono">$0</div>
       </div>
       <button id="clearCart" class="mt-3 w-full btn px-4 py-2 border border-slate-300 hover:bg-slate-100">清空購物車</button>
     </div>
-
 
     <div class="card bg-white p-5">
       <h2 class="text-lg font-semibold mb-4">取餐資訊</h2>
