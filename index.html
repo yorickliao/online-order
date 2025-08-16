@@ -78,11 +78,11 @@
                  class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
         </div>
         <div>
-          <label class="text-sm text-slate-600">最早可取餐時間（選填）</label>
+          <label class="text-sm text-slate-600">取餐時間（選填）</label>
           <select id="earliestTime" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900">
             <option value="">不指定（系統自動安排）</option>
           </select>
-          <p class="text-xs text-slate-500 mt-1">未選時，系統會從「現在 + 準備緩衝」開始排；若已打烊，會自動排隔天第一個時段。</p>
+          <p class="text-xs text-slate-500 mt-1">未選時，系統會自動從最早可取餐時間開始排。</p>
         </div>
         <button type="submit" class="w-full btn px-4 py-3 bg-slate-900 text-white hover:bg-slate-800">送出訂單</button>
         <p id="formError" class="text-sm text-red-600"></p>
