@@ -308,30 +308,38 @@ function renderOrders(ordersRaw){
 
       for (const o of arr) {
         const itemsText = (Array.isArray(o.items)?o.items:[]).map(it => `${it.name}×${it.qty}`).join('、') || '(無品項)';
+
+        // 手機：單欄直排；md 以上：左 1fr + 右 auto（操作區）
         const row = document.createElement('div');
-        row.className = `py-3 flex items-start justify-between gap-4 ${o.done ? 'opacity-60' : ''}`;
+        row.className = `py-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:items-center ${o.done ? 'opacity-60' : ''}`;
+
         row.innerHTML = `
           <div class="min-w-0">
-            <div class="font-semibold flex items-center gap-2">
+            <div class="font-semibold flex flex-wrap items-center gap-2">
               <span class="inline-flex items-center justify-center min-w-[3.5rem] px-3 py-1 rounded-xl bg-slate-900 text-white mono text-base">
                 ${formatPickupNo(o.pickupNo)}
               </span>
-              <span>${o.customer?.name || ''}</span>
-              <a class="text-slate-600 underline" href="tel:${o.customer?.phone || ''}">${o.customer?.phone || ''}</a>
-              <span class="ml-2 text-xs text-slate-500">${dayjs(o.createdAt).tz().format('HH:mm:ss')} 建立</span>
+              <span class="truncate max-w-[10rem]">${o.customer?.name || ''}</span>
+              <a class="text-slate-600 underline whitespace-nowrap" href="tel:${o.customer?.phone || ''}">${o.customer?.phone || ''}</a>
+              <span class="text-xs text-slate-500 whitespace-nowrap md:ml-2">${dayjs(o.createdAt).tz().format('HH:mm:ss')} 建立</span>
               ${o.done ? '<span class="badge text-xs px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700">已完成</span>' : ''}
             </div>
-            <div class="text-sm text-slate-700 mt-1">${itemsText}</div>
-            <div class="text-xs text-slate-500">等效數：${Number(o.capacityUnits||0)} ・ 小計：${formatCurrency(o.subtotal||0)} ・ 折扣：${formatCurrency(o.discount||0)} ・ 合計：<span class="mono">${formatCurrency(o.total||0)}</span></div>
+            <div class="text-sm text-slate-700 mt-1 break-words">${itemsText}</div>
+            <div class="text-xs text-slate-500">
+              等效數：${Number(o.capacityUnits||0)} ・ 小計：${formatCurrency(o.subtotal||0)}
+              ・ 折扣：${formatCurrency(o.discount||0)} ・ 合計：<span class="mono">${formatCurrency(o.total||0)}</span>
+            </div>
           </div>
-          <div class="shrink-0 flex items-center gap-3">
-            <label class="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" class="done-toggle scale-110" data-id="${o.id}" ${o.done ? 'checked' : ''}>
+
+          <div class="flex items-center gap-2 md:justify-end">
+            <label class="inline-flex items-center gap-1 text-sm select-none">
+              <input type="checkbox" class="done-toggle scale-125" data-id="${o.id}" ${o.done ? 'checked' : ''}>
               完成
             </label>
             <button data-id="${o.id}" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100 btn-delete">刪除</button>
           </div>
         `;
+
         list.appendChild(row);
       }
 
@@ -339,7 +347,7 @@ function renderOrders(ordersRaw){
     }
     root.appendChild(frag);
 
-    // ✅ 完成/取消 完成
+    // 完成/取消完成
     root.querySelectorAll('.done-toggle').forEach(chk=>{
       chk.addEventListener('change', async (e)=>{
         const id = e.currentTarget.getAttribute('data-id');
@@ -358,7 +366,7 @@ function renderOrders(ordersRaw){
       });
     });
 
-    // 刪除事件
+    // 刪除
     root.querySelectorAll('.btn-delete').forEach(btn=>{
       btn.addEventListener('click', async (e)=>{
         const id = e.currentTarget.getAttribute('data-id');
