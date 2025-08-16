@@ -234,7 +234,11 @@ function slotKey(d){ return dayjs(d).tz().format('HH:mm'); }
 function generateSlots(dateStr){
   const start = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
   const end   = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
-  const arr=[]; for(let t=start.clone(); t.isBefore(end); t=t.add(STORE.slotMinutes,'minute')) arr.push(t.toDate()); return arr;
+  const arr = [];
+  for (let t = start.clone(); !t.isAfter(end); t = t.add(STORE.slotMinutes,'minute')) {
+    arr.push(t.toDate());
+  }
+  return arr;
 }
 
 /* ===== 牛雜鍋剩餘量（不顯示給客人） ===== */
