@@ -12,7 +12,6 @@
     input,select,textarea,option,button{color-scheme:light}
     input,select,textarea{background:#fff!important;color:#0f172a!important;-webkit-text-fill-color:#0f172a;border-color:#cbd5e1}
     select option{background:#fff;color:#0f172a}
-    /* 讓 Modal 能在手機上下滑 */
     .scroll-y{overflow-y:auto;-webkit-overflow-scrolling:touch}
   </style>
 
@@ -36,8 +35,7 @@
       <div class="w-10 h-10 bg-slate-900 text-white rounded-xl grid place-items-center text-lg font-bold select-none">店</div>
       <div>
         <div class="text-xl font-semibold">326臭臭鍋 線上點餐</div>
-        <div class="text-xs text-slate-500">營業時間 16:30–20:30 </div>
-        <div class="text-xs text-slate-500">地址:台南市安南區安通路四段119巷30弄2號</div>
+        <div class="text-xs text-slate-500">營業時間 16:30–20:30 ・ 每 15 分鐘上限 7</div>
       </div>
     </div>
     <a href="#cart" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">購物車</a>
@@ -47,13 +45,11 @@
 <main class="mx-auto container-slim px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
   <!-- 左：菜單 -->
   <section class="lg:col-span-2 space-y-8">
-    <!-- 火鍋區 -->
     <div class="space-y-3">
       <h2 class="text-lg font-semibold">火鍋</h2>
       <div id="potList" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
     </div>
 
-    <!-- 主食區（留在外面） -->
     <div class="space-y-3">
       <h2 class="text-lg font-semibold">主食</h2>
       <div id="sideList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
@@ -72,7 +68,6 @@
       <button id="clearCart" class="mt-3 w-full btn px-4 py-2 border border-slate-300 hover:bg-slate-100">清空購物車</button>
     </div>
 
-    <!-- 取餐資訊 -->
     <div class="card bg-white p-5">
       <h2 class="text-lg font-semibold mb-4">取餐資訊</h2>
       <form id="checkoutForm" class="space-y-4" autocomplete="off">
@@ -86,11 +81,11 @@
                  class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
         </div>
         <div>
-          <label class="text-sm text-slate-600">取餐時間</label>
+          <label class="text-sm text-slate-600">最早可取餐時間（選填）</label>
           <select id="earliestTime" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900">
             <option value="">不指定（系統自動安排）</option>
           </select>
-          <p class="text-xs text-slate-500 mt-1">未選時，系統會從最早可取餐時間開始排。</p>
+          <p class="text-xs text-slate-500 mt-1">未選時，系統會從「現在 + 準備緩衝」開始排；若已打烊，會自動排隔天第一個時段。</p>
         </div>
         <button type="submit" class="w-full btn px-4 py-3 bg-slate-900 text-white hover:bg-slate-800">送出訂單</button>
         <p id="formError" class="text-sm text-red-600"></p>
@@ -214,14 +209,13 @@ const POTS = [
   { id:"牛雜鍋",   name:"牛雜鍋",   price:150, capacityUnits:1, spiceOpts:SPICE },
   { id:"大腸鴨血鍋", name:"大腸鴨血鍋", price:140, capacityUnits:1, spiceOpts:SPICE },
 ];
-/* 加點清單：已移除「高麗菜(冬)」 */
+/* 移除高麗菜(冬)；牛雜鍋僅能加：豆皮、臭豆腐、鴨血、金針菇 */
 const EXTRAS = [
   { id:"蟹肉棒", price:20 },{ id:"鱈魚丸", price:20 },{ id:"北海翅", price:20 },{ id:"鑫鑫腸", price:20 },
   { id:"金針菇", price:10 },{ id:"臭豆腐", price:20 },{ id:"貢丸", price:20 },{ id:"魚餃", price:20 },
   { id:"燕餃", price:20 },{ id:"黑輪", price:20 },{ id:"米血", price:20 },{ id:"鴨血", price:20 },
   { id:"蝦球", price:20 },{ id:"大腸", price:50 },{ id:"豆皮", price:30 },
 ];
-/* 牛雜鍋限定可加點 */
 const BEEF_TRIPES_ALLOWED = ["豆皮","臭豆腐","鴨血","金針菇"];
 
 const SIDES = [
@@ -230,10 +224,7 @@ const SIDES = [
 
 /* ===== 狀態 ===== */
 const el = s => document.querySelector(s);
-const state = {
-  cart: [], // entries: {type:'pot', pot, spice, qty, note, extras:[{id,price,qty}]} | {type:'side', item:{id,price}, qty}
-  ordersCache: []
-};
+const state = { cart: [], ordersCache: [] };
 
 /* ===== 小工具 ===== */
 const pad2 = n => String(n).padStart(2,'0');
@@ -302,12 +293,10 @@ function openPotModal(pot){
   document.body.classList.add('overflow-hidden');
 
   el('#pmTitle').textContent = pot.name;
-  // 辣度
   const sp = el('#pmSpice'); sp.innerHTML='';
   pot.spiceOpts.forEach(s => { const o=document.createElement('option'); o.value=s; o.textContent=s; sp.appendChild(o); });
-  // 數量/備註
   el('#pmQty').value = 1; el('#pmNote').value = '';
-  // 單點（牛雜鍋僅能加指定品項）
+
   const ex = el('#pmExtras'); ex.innerHTML='';
   const extrasList = pot.id === '牛雜鍋'
     ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id))
@@ -343,12 +332,11 @@ function updatePmSubtotal(){
   if(!pmCurrent) return;
   const potQty = Math.max(1, parseInt(el('#pmQty').value)||1);
   let subtotal = pmCurrent.price * potQty;
+  const list = pmCurrent.id === '牛雜鍋'
+    ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id))
+    : EXTRAS;
   el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{
-    const n = Math.max(0, parseInt(q.value)||0);
-    const list = pmCurrent.id === '牛雜鍋'
-      ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id))
-      : EXTRAS;
-    subtotal += list[i].price * n;
+    subtotal += list[i].price * Math.max(0, parseInt(q.value)||0);
   });
   el('#pmSubtotal').textContent = money(subtotal);
 }
@@ -411,7 +399,7 @@ function renderCart(){
     }
     root.appendChild(div);
   });
-  el('#cartTotal').textContent = money(cartTotal());
+  el('#cartTotal').textContent = money(cartTotal()));
 }
 
 /* ===== API ===== */
@@ -444,6 +432,10 @@ function autoAssignSlot(dateStr, earliest){
   }
   return null;
 }
+function isSlotAvailable(dateStr, slotDate, needUnits){
+  const used = (bookedCapacityMap(dateStr)[slotKey(slotDate)] || 0);
+  return used + needUnits <= STORE.slotCapacity;
+}
 
 /* ===== 送單 ===== */
 async function onSubmitOrder(e){
@@ -466,27 +458,47 @@ async function onSubmitOrder(e){
 
     const sel = el('#earliestTime').value;
     let earliest;
-    if (sel) earliest = dayjs.tz(`${dateStr} ${sel}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
-    else {
+    if (sel) {
+      earliest = dayjs.tz(`${dateStr} ${sel}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+    } else {
       const candidate = dayjs().tz().add(STORE.prepBufferMinutes,'minute');
       if (candidate.isBefore(openToday)) earliest = openToday;
-      else if (candidate.isAfter(closeToday)) { dateStr = dayjs.tz(dateStr,'YYYY-MM-DD','Asia/Taipei').add(1,'day').format('YYYY-MM-DD'); earliest = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei'); }
-      else earliest = candidate;
+      else if (candidate.isAfter(closeToday)) {
+        dateStr = dayjs.tz(dateStr,'YYYY-MM-DD','Asia/Taipei').add(1,'day').format('YYYY-MM-DD');
+        earliest = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+      } else {
+        earliest = candidate;
+      }
     }
     const rounded = roundUpToSlot(earliest.toDate(), STORE.slotMinutes);
 
+    // 先抓該天訂單
     try{ state.ordersCache = await apiList(dateStr); }catch(_){ await new Promise(r=>setTimeout(r,800)); state.ordersCache = await apiList(dateStr); }
 
-    let slot = autoAssignSlot(dateStr, rounded);
-    if(!slot){
-      const tmr = dayjs.tz(dateStr,'YYYY-MM-DD','Asia/Taipei').add(1,'day').format('YYYY-MM-DD');
-      try{ state.ordersCache = await apiList(tmr); }catch(_){}
-      slot = autoAssignSlot(tmr, dateAt(tmr, STORE.openHour, STORE.openMinute));
-      if(slot) dateStr = tmr;
-    }
-    if(!slot){ showErr('近期可用時段已滿，請改天或來電訂餐。'); return; }
+    let slot = null;
+    const needUnits = cartCapacityUnits();
 
-    // 組訂單項目
+    if (sel) {
+      // 使用者有選時段：只檢查該時段，不再自動延後
+      if (!isSlotAvailable(dateStr, rounded, needUnits)) {
+        showErr(`您選擇的 ${slotKey(rounded)} 時段已額滿，請改選其他取餐時間。`);
+        return;
+      }
+      slot = rounded;
+    } else {
+      // 未選時段：維持原本自動安排（可延到隔天第一個時段）
+      slot = autoAssignSlot(dateStr, rounded);
+      if (!slot) {
+        const tmr = dayjs.tz(dateStr,'YYYY-MM-DD','Asia/Taipei').add(1,'day').format('YYYY-MM-DD');
+        try { state.ordersCache = await apiList(tmr); } catch(_){}
+        const tmrOpen = dateAt(tmr, STORE.openHour, STORE.openMinute);
+        slot = autoAssignSlot(tmr, tmrOpen);
+        if (slot) dateStr = tmr;
+      }
+      if (!slot) { showErr('近期可用時段已滿，請改天或來電訂餐。'); return; }
+    }
+
+    // 組訂單
     const items = [];
     state.cart.forEach(e=>{
       if(e.type==='pot'){
@@ -502,7 +514,7 @@ async function onSubmitOrder(e){
       id: 'O'+Date.now(),
       date: dateStr,
       assignedSlot: slot.toISOString(),
-      capacityUnits: cartCapacityUnits(),
+      capacityUnits: needUnits,
       customer: { name, phone },
       items, subtotal, discount: 0, total: subtotal,
       createdAt: new Date().toISOString(),
@@ -535,14 +547,8 @@ function populateEarliestTimeOptions(){
 }
 
 /* ===== 公告 ===== */
-function openNotice(){
-  document.body.classList.add('overflow-hidden');
-  el('#noticeModal').classList.remove('hidden');
-}
-function closeNotice(){
-  el('#noticeModal').classList.add('hidden');
-  document.body.classList.remove('overflow-hidden');
-}
+function openNotice(){ document.body.classList.add('overflow-hidden'); el('#noticeModal').classList.remove('hidden'); }
+function closeNotice(){ el('#noticeModal').classList.add('hidden'); document.body.classList.remove('overflow-hidden'); }
 
 /* ===== 啟動 ===== */
 document.addEventListener('DOMContentLoaded', async ()=>{
