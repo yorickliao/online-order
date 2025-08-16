@@ -54,24 +54,26 @@
     </div>
   </section>
 
-  <aside id="cart" class="space-y-6">
-    <!-- 只在桌機 sticky，並限制高度，內容內捲 -->
-    <div class="card bg-white p-5 lg:sticky lg:top-[88px] lg:max-h-[calc(100vh-120px)] lg:flex lg:flex-col lg:overflow-hidden">
+  <aside id="cart"
+    class="space-y-6 lg:sticky lg:top-[88px] lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:pr-1"
+    style="-webkit-overflow-scrolling: touch;">
+    <div class="card bg-white p-5">
       <h2 class="text-lg font-semibold mb-4">購物車</h2>
-      <div id="cartItems" class="space-y-3 flex-1 overflow-y-auto pr-1" style="-webkit-overflow-scrolling: touch;"></div>
+      <div id="cartItems" class="space-y-3"></div>
       <div class="border-t pt-4 mt-4 flex items-center justify-between text-lg font-semibold">
         <div>總計</div>
         <div id="cartTotal" class="mono">$0</div>
       </div>
       <button id="clearCart" class="mt-3 w-full btn px-4 py-2 border border-slate-300 hover:bg-slate-100">清空購物車</button>
     </div>
-
+  
     <div class="card bg-white p-5">
       <h2 class="text-lg font-semibold mb-4">取餐資訊</h2>
       <form id="checkoutForm" class="space-y-4" autocomplete="off">
         <div>
           <label class="text-sm text-slate-600">姓名</label>
-          <input required id="customerName" type="text" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
+          <input required id="customerName" type="text"
+                 class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
         </div>
         <div>
           <label class="text-sm text-slate-600">電話</label>
@@ -80,7 +82,8 @@
         </div>
         <div>
           <label class="text-sm text-slate-600">取餐時間（選填）</label>
-          <select id="earliestTime" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900">
+          <select id="earliestTime"
+                  class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900">
             <option value="">不指定（系統自動安排）</option>
           </select>
           <p class="text-xs text-slate-500 mt-1">未選時，系統會自動從最早可取餐時間開始排。</p>
