@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>326臭臭鍋 訂單管理</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- 僅亮色，避免 iOS Safari 把原生表單變黑底看不到字 -->
   <meta name="color-scheme" content="light">
   <style>
     .card{border-radius:1rem}
@@ -13,13 +12,12 @@
     .badge{border-radius:999px}
     .mono{font-variant-numeric:tabular-nums}
     .container-slim{max-width:1200px}
-    /* 強制表單控制元件走亮色（修正手機上看不到字） */
     input, select, textarea, option, button { color-scheme: light; }
     input, select, textarea {
       background:#fff !important;
-      color:#0f172a !important;            /* slate-900 */
-      -webkit-text-fill-color:#0f172a;     /* iOS Safari */
-      border-color:#cbd5e1;                /* slate-300 */
+      color:#0f172a !important;
+      -webkit-text-fill-color:#0f172a;
+      border-color:#cbd5e1;
     }
     select option { background:#fff; color:#0f172a; }
   </style>
@@ -148,6 +146,7 @@ const el = s => document.querySelector(s);
 function formatCurrency(n){ return '$' + Number(n||0).toLocaleString('zh-Hant'); }
 function todayYMD(){ return dayjs().tz().format('YYYY-MM-DD'); }
 function slotKey(iso){ return dayjs(iso).tz().format('HH:mm'); }
+function formatPickupNo(n){ return n ? `#${Number(n)}` : '—'; }
 
 /* ===== 可靠的 fetch 包裝 ===== */
 async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000) {
@@ -188,7 +187,7 @@ async function apiDelete(id){
   return data;
 }
 
-/* ===== 資料清洗（避免壞資料造成渲染失敗） ===== */
+/* ===== 資料清洗 ===== */
 function sanitizeOrders(list){
   if (!Array.isArray(list)) return [];
   const out = [];
@@ -200,6 +199,7 @@ function sanitizeOrders(list){
       if (isNaN(d)) continue; // 無效時間跳過
       out.push({
         id,
+        pickupNo: Number(o?.pickupNo || 0), // 保留取餐號碼
         assignedSlot: d.toISOString(),
         capacityUnits: Number(o?.capacityUnits || 0),
         customer: { name: String(o?.customer?.name || ''), phone: String(o?.customer?.phone || '') },
@@ -223,6 +223,7 @@ function renderSummary(orders){
   el('#sumCapacity').textContent = sumCapacity;
   el('#sumRevenue').textContent = formatCurrency(sumRevenue);
 }
+
 function renderOrders(ordersRaw){
   try{
     const orders = sanitizeOrders(ordersRaw);
@@ -238,7 +239,12 @@ function renderOrders(ordersRaw){
 
     const frag = document.createDocumentFragment();
     for (const hhmm of slots) {
-      const arr = groups[hhmm].sort((a,b)=> (a.createdAt||'').localeCompare(b.createdAt||''));
+      // 以取餐號碼優先排序，其次建立時間
+      const arr = groups[hhmm].sort((a,b)=>{
+        const ap=a.pickupNo||0, bp=b.pickupNo||0;
+        if (ap && bp && ap!==bp) return ap-bp;
+        return (a.createdAt||'').localeCompare(b.createdAt||'');
+      });
       const used = arr.reduce((s,o)=> s + Number(o.capacityUnits||0), 0);
       const pct = Math.max(0, Math.min(100, Math.round(used / STORE.slotCapacity * 100)));
 
@@ -262,10 +268,12 @@ function renderOrders(ordersRaw){
         row.className = 'py-3 flex items-start justify-between gap-4';
         row.innerHTML = `
           <div class="min-w-0">
-            <div class="font-medium">
-              <span class="inline-block min-w-[4.5rem]">#${(o.id||'').slice(-6)}</span>
-              <span class="ml-2">${o.customer?.name || ''}</span>
-              <a class="ml-2 text-slate-600 underline" href="tel:${o.customer?.phone || ''}">${o.customer?.phone || ''}</a>
+            <div class="font-semibold flex items-center gap-2">
+              <span class="inline-flex items-center justify-center min-w-[3.5rem] px-3 py-1 rounded-xl bg-slate-900 text-white mono text-base">
+                ${formatPickupNo(o.pickupNo)}
+              </span>
+              <span>${o.customer?.name || ''}</span>
+              <a class="text-slate-600 underline" href="tel:${o.customer?.phone || ''}">${o.customer?.phone || ''}</a>
               <span class="ml-2 text-xs text-slate-500">${dayjs(o.createdAt).tz().format('HH:mm:ss')} 建立</span>
             </div>
             <div class="text-sm text-slate-700 mt-1">${itemsText}</div>
