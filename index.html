@@ -24,23 +24,20 @@
     dayjs.extend(dayjs_plugin_customParseFormat);
     dayjs.extend(dayjs_plugin_utc);
     dayjs.extend(dayjs_plugin_timezone);
-    const STORE_TZ = 'Asia/Taipei';
+    const STORE_TZ = 'Asia/Taipei';               /* ← 只在這裡宣告一次 */
     dayjs.tz.setDefault(STORE_TZ);
   </script>
 
   <!-- 前端測試用：mockNow 支援（強制台北時區） -->
   <script>
-    // 統一時區常數（保險一次）
-    const STORE_TZ = 'Asia/Taipei';
-  
     // 讀參數
     const usp = new URL(location.href).searchParams;
     const __urlMockNowRaw = usp.get('mockNow') || '';
-  
+
     // 先宣告，避免 TDZ
     let __mockNowParsed = null;
-  
-    // 解析 mockNow（保留你原本的 robust 解析即可）
+
+    // 解析 mockNow（容錯多格式）
     function __parseMockNow(raw) {
       if (!raw) return null;
       const s = decodeURIComponent(String(raw).trim());
@@ -51,8 +48,11 @@
         /\d{2}:\d{2}$/.test(s.replace(' ', 'T')) ? s.replace(' ', 'T') + ':00' : s.replace(' ', 'T'),
       ];
       for (const c of candidates) {
+        // 已含時區的完整 ISO
         let d = dayjs(c);
         if (d.isValid() && /[zZ]|[+-]\d{2}:?\d{2}$/.test(c)) return dayjs.tz(d.toDate(), STORE_TZ);
+
+        // 常見格式（套台北時區）
         d = dayjs.tz(c, 'YYYY-MM-DDTHH:mm:ssZ', STORE_TZ); if (d.isValid()) return d;
         d = dayjs.tz(c, 'YYYY-MM-DDTHH:mmZ',     STORE_TZ); if (d.isValid()) return d;
         d = dayjs.tz(c, 'YYYY-MM-DD HH:mm:ss',   STORE_TZ); if (d.isValid()) return d;
@@ -63,20 +63,20 @@
       console.warn('[mockNow] 無法解析時間字串：', raw);
       return null;
     }
-  
-    // 先完成賦值
+
+    // 完成賦值
     __mockNowParsed = __parseMockNow(__urlMockNowRaw);
-  
-    // 最後才定義 nowTz()，使用上面已初始化的值
+
+    // 統一取「現在」（可被 mock），永遠用台北時區
     function nowTz(){
       if (__mockNowParsed && typeof __mockNowParsed.isValid === 'function' && __mockNowParsed.isValid()) {
         return __mockNowParsed;            // 使用 mockNow（Asia/Taipei）
       }
-      return dayjs().tz(STORE_TZ);          // 沒 mock 時也強制台北時區
+      return dayjs().tz(STORE_TZ);         // 沒 mock 時也強制台北時區
     }
   </script>
-
 </head>
+
 <body class="bg-slate-50 text-slate-900 selection:bg-slate-200 selection:text-slate-900">
 <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
   <div class="mx-auto container-slim px-4 py-4 flex items-center justify-between">
