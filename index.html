@@ -26,47 +26,37 @@
     const STORE_TZ = 'Asia/Taipei';
     dayjs.tz.setDefault(STORE_TZ);
   </script>
+
   <!-- 前端測試用：mockNow 支援（只改前端，不動後端） -->
   <script>
-  // 強韌解析 mockNow：支援多種格式與自動補秒數/時區
-  const __urlMockNowRaw = new URL(location.href).searchParams.get('mockNow');
+    // 強韌解析 mockNow：支援多種格式與自動補秒數/時區
+    const __urlMockNowRaw = new URL(location.href).searchParams.get('mockNow');
 
-  function __parseMockNow(raw) {
-    if (!raw) return null;
-    const s = decodeURIComponent(String(raw).trim());
-    // 嘗試幾種常見格式
-    const candidates = [
-      s,                                                // 原字串（若本來就是完整 ISO）
-      s.replace(' ', 'T'),                              // 把空白換成 T
-      /\d{2}:\d{2}$/.test(s) ? s + ':00' : s,           // 補秒
-      /\d{2}:\d{2}$/.test(s.replace(' ', 'T')) ? s.replace(' ', 'T') + ':00' : s.replace(' ', 'T'),
-    ];
-
-    for (const c of candidates) {
-      // 1) 完整 ISO（含時區）
-      let d = dayjs(c);
-      if (d.isValid() && /[zZ]|[+-]\d{2}:?\d{2}$/.test(c)) return dayjs.tz(d.toDate(), 'Asia/Taipei');
-
-      // 2) 指定格式 + 時區
-      d = dayjs.tz(c, 'YYYY-MM-DDTHH:mm:ssZ', 'Asia/Taipei'); if (d.isValid()) return d;
-      d = dayjs.tz(c, 'YYYY-MM-DDTHH:mmZ',     'Asia/Taipei'); if (d.isValid()) return d;
-      d = dayjs.tz(c, 'YYYY-MM-DD HH:mm:ss',   'Asia/Taipei'); if (d.isValid()) return d;
-      d = dayjs.tz(c, 'YYYY-MM-DD HH:mm',      'Asia/Taipei'); if (d.isValid()) return d;
-      d = dayjs.tz(c, 'YYYY/MM/DD HH:mm',      'Asia/Taipei'); if (d.isValid()) return d;
-      d = dayjs.tz(c, 'YYYY-MM-DD',            'Asia/Taipei'); if (d.isValid()) return d; // 若只有日期，當天 00:00
+    function __parseMockNow(raw) {
+      if (!raw) return null;
+      const s = decodeURIComponent(String(raw).trim());
+      const candidates = [
+        s, s.replace(' ', 'T'),
+        /\d{2}:\d{2}$/.test(s) ? s + ':00' : s,
+        /\d{2}:\d{2}$/.test(s.replace(' ', 'T')) ? s.replace(' ', 'T') + ':00' : s.replace(' ', 'T'),
+      ];
+      for (const c of candidates) {
+        let d = dayjs(c);
+        if (d.isValid() && /[zZ]|[+-]\d{2}:?\d{2}$/.test(c)) return dayjs.tz(d.toDate(), 'Asia/Taipei');
+        d = dayjs.tz(c, 'YYYY-MM-DDTHH:mm:ssZ', 'Asia/Taipei'); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DDTHH:mmZ',     'Asia/Taipei'); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DD HH:mm:ss',   'Asia/Taipei'); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DD HH:mm',      'Asia/Taipei'); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY/MM/DD HH:mm',      'Asia/Taipei'); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DD',            'Asia/Taipei'); if (d.isValid()) return d;
+      }
+      console.warn('[mockNow] 無法解析時間字串：', raw);
+      return null;
     }
-    console.warn('[mockNow] 無法解析時間字串：', raw);
-    return null;
-  }
 
-  const __mockNowParsed = __parseMockNow(__urlMockNowRaw);
-
-  // 前端統一取得「現在（可被 mock）」的函式
-  function nowTz(){
-    return __mockNowParsed ? __mockNowParsed : dayjs().tz();
-  }
-</script>
-
+    const __mockNowParsed = __parseMockNow(__urlMockNowRaw);
+    function nowTz(){ return __mockNowParsed ? __mockNowParsed : dayjs().tz(); }
+  </script>
 </head>
 <body class="bg-slate-50 text-slate-900 selection:bg-slate-200 selection:text-slate-900">
 <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
@@ -138,7 +128,7 @@
 
 <!-- 成功視窗：新增取餐號碼顯示 -->
 <div id="successModal" class="fixed inset-0 z-40 hidden">
-  <div class="absolute inset-0 bg黑/40"></div>
+  <div class="absolute inset-0 bg-black/40"></div>
   <div class="relative z-10 mx-auto mt-24 w-[92%] max-w-xl card bg-white p-6">
     <h3 class="text-xl font-semibold mb-2">下單成功</h3>
     <p class="text-slate-700">您的取餐時段為：</p>
@@ -153,7 +143,7 @@
 
 <div id="potModal" class="fixed inset-0 z-40 hidden scroll-y">
   <div class="absolute inset-0 bg-black/40"></div>
-  <div class="relative z-10 min-h-full flex items-start justify-center py-6 px-3">
+  <div class="relative z-10 min-h-full flex items-start justify中心 py-6 px-3">
     <div class="w-full max-w-2xl card bg-white p-6 max-h-[85vh] scroll-y">
       <div class="flex items-start justify-between">
         <div class="min-w-0">
@@ -187,7 +177,7 @@
       <div class="mt-5">
         <label class="text-sm text-slate-600">備註（選填）</label>
         <input id="pmNote" type="text" placeholder=""
-               class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg白 text-slate-900" />
+               class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
       </div>
 
       <div class="mt-6 flex items-center justify-between">
@@ -237,7 +227,6 @@ const STORE = {
   prepBufferMinutes: 20
 };
 
-// 後端也有設定：牛雜鍋每日限量
 const LIMIT_ITEM_ID = '牛雜鍋';
 
 /* ===== 商品資料 ===== */
@@ -258,7 +247,6 @@ const EXTRAS = [
   { id:"蝦球", price:20 },{ id:"大腸", price:50 },{ id:"豆皮", price:30 },
   { id:"豬肉", price:40 }
 ];
-// 牛雜鍋只能加：豆皮、臭豆腐、鴨血、金針菇
 const BEEF_TRIPES_ALLOWED = ["豆皮","臭豆腐","鴨血","金針菇"];
 const SIDES = [{ id:"白飯", price:10 },{ id:"冬粉", price:10 },{ id:"科學麵", price:15 }];
 
@@ -285,9 +273,8 @@ function generateSlots(dateStr){
 }
 
 /* ===== 服務週四與開放下單視窗（週三 00:00 → 週四 20:30） ===== */
-// 取得本次服務日（週四）的 YYYY-MM-DD：若現在已過本週四 20:30，則指向下週四。
 function serviceThursdayIso(){
-  const now = nowTz(); // ← 改用 mockNow
+  const now = nowTz();
   const daysToThu = (4 - now.day() + 7) % 7; // 0=Sun ... 4=Thu
   let thu = now.add(daysToThu, 'day').format('YYYY-MM-DD');
   const thuEnd = dayjs.tz(`${thu} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
@@ -296,9 +283,8 @@ function serviceThursdayIso(){
   }
   return thu;
 }
-// 是否在開放點餐時間（以本次服務週四為準）
 function isWithinOrderingWindow(){
-  const now = nowTz(); // ← 改用 mockNow
+  const now = nowTz();
   const thuStr = serviceThursdayIso();
   const thuDay = dayjs.tz(thuStr, 'YYYY-MM-DD', 'Asia/Taipei'); // 週四 00:00
   const wedStart = thuDay.clone().subtract(1, 'day').startOf('day'); // 週三 00:00
@@ -309,7 +295,7 @@ function isWithinOrderingWindow(){
 /* ===== 牛雜鍋剩餘量（不顯示給客人） ===== */
 function tripeRemaining(){
   const info = state.limits && state.limits[LIMIT_ITEM_ID];
-  if (!info) return Infinity; // 未取到時不顯示、也不限制（後端會擋）
+  if (!info) return Infinity;
   return Number(info.remaining || 0);
 }
 
@@ -381,7 +367,6 @@ function openPotModal(pot){
   el('#pmTitle').textContent = pot.name;
   const sp = el('#pmSpice'); sp.innerHTML=''; pot.spiceOpts.forEach(s => { const o=document.createElement('option'); o.value=s; o.textContent=s; sp.appendChild(o); });
 
-  // 不顯示剩餘數，只顯示售完 or 限量泛用提示
   const capNote = el('#pmCapNote');
   let maxQty = 9999;
   if (pot.id === LIMIT_ITEM_ID) {
@@ -407,7 +392,6 @@ function openPotModal(pot){
   if (maxQty !== 9999) qtyInput.max = String(maxQty);
   el('#pmNote').value = '';
 
-  // 單點清單（牛雜鍋只允許指定加點）
   const ex = el('#pmExtras'); ex.innerHTML='';
   const extrasList = pot.id === LIMIT_ITEM_ID ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id)) : EXTRAS;
   extrasList.forEach(e=>{
@@ -540,14 +524,13 @@ async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000){
   finally{ clearTimeout(timer); }
 }
 
-// 讀單：回傳整個物件 { ok, orders, limits }
 async function apiList(dateStr){
   const u = new URL(ENDPOINT);
   u.searchParams.set('action','list');
   if(dateStr) u.searchParams.set('date', dateStr);
   u.searchParams.set('key', API_KEY);
-  // 可選：把 mockNow 一起帶到後端（後端不認也沒差）
-  if (__urlMockNow) u.searchParams.set('mockNow', __urlMockNow);
+  // 修正：使用 __urlMockNowRaw（原本寫 __urlMockNow 會 ReferenceError）
+  if (__urlMockNowRaw) u.searchParams.set('mockNow', __urlMockNowRaw);
 
   const r = await fetchWithTimeout(u.toString(), {}, 15000);
   const t = await r.text();
@@ -556,11 +539,10 @@ async function apiList(dateStr){
   return d;
 }
 
-// 送單：不在這裡丟錯，讓呼叫端判斷 resp.ok / resp.error
 async function apiCreate(order){
-  // 可選：POST body 也帶 mockNow（後端不認也沒差）
   const body = { apiKey:API_KEY, action:'create', order };
-  if (__urlMockNow) body.mockNow = __urlMockNow;
+  // 同上修正
+  if (__urlMockNowRaw) body.mockNow = __urlMockNowRaw;
 
   const r = await fetchWithTimeout(ENDPOINT, { method:'POST', body: JSON.stringify(body) }, 20000);
   const t = await r.text(); let d; try{ d=JSON.parse(t) }catch{ throw new Error('bad_json:'+t.slice(0,200)) }
@@ -608,13 +590,11 @@ async function onSubmitOrder(e){
     const phone = el('#customerPhone').value.trim();
     if(!name || !phone){ showErr('請完整填寫姓名與電話。'); return; }
 
-    // 僅允許在開放下單時間（週三 00:00 ～ 週四 20:30（含））
     if (!isWithinOrderingWindow()) {
       showErr('目前不在開放點餐時間（週三 00:00 起至週四 20:30 止）。');
       return;
     }
 
-    // 若購物車包含牛雜鍋，先做前端預檢（不顯示剩餘數）
     const tripeInCart = state.cart.filter(e=> e.type==='pot' && e.pot?.id===LIMIT_ITEM_ID)
                                   .reduce((s,e)=> s + Number(e.qty||0), 0);
     const remainNow = tripeRemaining();
@@ -623,31 +603,25 @@ async function onSubmitOrder(e){
       return;
     }
 
-    // 本次服務日固定為週四
     let dateStr = serviceThursdayIso();
     const thuOpen  = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
     const thuClose = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
 
-    // 使用者選擇的最早時間（只會是週四的某時段）
     const sel = el('#earliestTime').value;
     let earliest;
     if (sel) {
       earliest = dayjs.tz(`${dateStr} ${sel}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
     } else {
-      // 自動安排：週三下單 → 週四開門；週四下單 → max(現在+備餐, 週四開門)
-      const candidate = nowTz().add(STORE.prepBufferMinutes,'minute'); // ← 改用 mockNow
+      const candidate = nowTz().add(STORE.prepBufferMinutes,'minute');
       earliest = candidate.isBefore(thuOpen) ? thuOpen : candidate;
     }
-    // 四捨五入到時段
     const rounded = roundUpToSlot(earliest.toDate(), STORE.slotMinutes);
 
-    // 超出週四打烊就不接受
     if (dayjs(rounded).isAfter(thuClose)) {
       showErr('今日（週四）可用時段已結束，請於下週三再行預訂。');
       return;
     }
 
-    // 取最新 orders + limits（避免同時段競態）
     try{
       const data = await apiList(dateStr);
       state.ordersCache = data.orders || [];
@@ -664,7 +638,6 @@ async function onSubmitOrder(e){
       }
       slot = rounded;
     } else {
-      // 自動在同一個週四內尋找可用時段；不往翌日/下週延
       slot = autoAssignSlot(dateStr, rounded);
       if (!slot) {
         showErr('今日（週四）可用時段已額滿，請於下週三再行預訂。');
@@ -685,21 +658,20 @@ async function onSubmitOrder(e){
     const subtotal = items.reduce((s,it)=> s + it.price*it.qty, 0);
     const order = {
       id: 'O'+Date.now(),
-      date: dateStr,                          // ← 固定週四
+      date: dateStr,
       assignedSlot: slot.toISOString(),
       capacityUnits: needUnits,
       customer: { name, phone },
       items, subtotal, discount: 0, total: subtotal,
       createdAt: new Date().toISOString(),
       source: 'web-customer',
-      pickupNo: nextPickupNoForDate(dateStr)  // 暫編，後端覆蓋
+      pickupNo: nextPickupNoForDate(dateStr)
     };
 
     const resp = await apiCreate(order);
     if (!resp.ok) {
       if (resp.error === 'limit_reached' && resp.itemId === LIMIT_ITEM_ID) {
         showErr('牛雜鍋今日限量已達上限，請調整數量或改點其他品項。');
-        // 重新拉最新狀態，更新 UI（不顯示剩餘數）
         try{
           const data = await apiList(dateStr);
           state.ordersCache = data.orders || [];
@@ -713,7 +685,6 @@ async function onSubmitOrder(e){
       return;
     }
 
-    // 成功：顯示後端正式取餐號碼
     const pickupNo = (resp.pickupNo || (resp.order && resp.order.pickupNo)) || order.pickupNo;
 
     state.cart = []; renderCart();
@@ -721,7 +692,6 @@ async function onSubmitOrder(e){
     el('#pickupNoText').textContent = String(pickupNo);
     el('#successModal').classList.remove('hidden');
 
-    // 成功後也更新限量狀態（不顯示剩餘數）
     try{
       const data = await apiList(dateStr);
       state.ordersCache = data.orders || [];
@@ -759,7 +729,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   openNotice();
   el('#noticeClose').addEventListener('click', closeNotice);
 
-  // 只抓本次服務日（週四）的 orders + limits
   apiList(serviceThursdayIso())
     .then((data)=>{
       state.ordersCache = data.orders || [];
@@ -768,7 +737,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     })
     .catch(()=>{});
 
-  // Modal 控制
   el('#pmClose').addEventListener('click', closePotModal);
 
   el('#clearCart').addEventListener('click', ()=>{ state.cart=[]; renderCart(); });
