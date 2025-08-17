@@ -227,8 +227,10 @@ const state = { cart: [], ordersCache: [], limits: {} };
 
 const pad2 = n => String(n).padStart(2,'0');
 const money = n => '$' + Number(n||0).toLocaleString('zh-Hant');
-const todayIso = () => dayjs().tz().format('YYYY-MM-DD');
-function dateAt(dateStr, h, m){ return dayjs.tz(`${dateStr} ${pad2(h)}:${pad2(m)}`,'YYYY-MM-DD HH:mm','Asia/Taipei').toDate(); }
+
+function dateAt(dateStr, h, m){
+  return dayjs.tz(`${dateStr} ${pad2(h)}:${pad2(m)}`,'YYYY-MM-DD HH:mm','Asia/Taipei').toDate();
+}
 function roundUpToSlot(d, minutes){ const ms=minutes*60*1000; return new Date(Math.ceil(d.getTime()/ms)*ms); }
 function slotKey(d){ return dayjs(d).tz().format('HH:mm'); }
 function generateSlots(dateStr){
@@ -239,6 +241,28 @@ function generateSlots(dateStr){
     arr.push(t.toDate());
   }
   return arr;
+}
+
+/* ===== 服務週四與開放下單視窗（週三 00:00 → 週四 20:30） ===== */
+// 取得本次服務日（週四）的 YYYY-MM-DD：若現在已過本週四 20:30，則指向下週四。
+function serviceThursdayIso(){
+  const now = dayjs().tz();
+  const daysToThu = (4 - now.day() + 7) % 7; // 0=Sun ... 4=Thu
+  let thu = now.add(daysToThu, 'day').format('YYYY-MM-DD');
+  const thuEnd = dayjs.tz(`${thu} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+  if (now.isAfter(thuEnd)) {
+    thu = dayjs.tz(thu,'YYYY-MM-DD','Asia/Taipei').add(7,'day').format('YYYY-MM-DD');
+  }
+  return thu;
+}
+// 是否在開放點餐時間（以本次服務週四為準）
+function isWithinOrderingWindow(){
+  const now = dayjs().tz();
+  const thuStr = serviceThursdayIso();
+  const thuDay = dayjs.tz(thuStr, 'YYYY-MM-DD', 'Asia/Taipei'); // 週四 00:00
+  const wedStart = thuDay.clone().subtract(1, 'day').startOf('day'); // 週三 00:00
+  const thuEnd   = thuDay.clone().hour(STORE.closeHour).minute(STORE.closeMinute).second(59);
+  return now.isSameOrAfter(wedStart) && now.isSameOrBefore(thuEnd);
 }
 
 /* ===== 牛雜鍋剩餘量（不顯示給客人） ===== */
@@ -283,8 +307,7 @@ function renderPots(){
 }
 
 function renderSides(){
-  const root = el('#sideList'); 
-  root.innerHTML='';
+  const root = el('#sideList'); root.innerHTML='';
   SIDES.forEach(s=>{
     const row = document.createElement('div');
     row.className = 'card bg-white p-4 flex items-center justify-between gap-3';
@@ -309,7 +332,6 @@ function renderSides(){
     root.appendChild(row);
   });
 }
-
 
 /* ===== Modal ===== */
 let pmCurrent = null;
@@ -520,7 +542,7 @@ function nextPickupNoForDate(dateStr){
   return maxNo + 1;
 }
 
-/* ===== Submit ===== */
+/* ===== Submit（僅開放週三 00:00 ～ 週四 20:30；所有訂單一律排本次週四） ===== */
 async function onSubmitOrder(e){
   e.preventDefault();
   const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -535,6 +557,12 @@ async function onSubmitOrder(e){
     const phone = el('#customerPhone').value.trim();
     if(!name || !phone){ showErr('請完整填寫姓名與電話。'); return; }
 
+    // 僅允許在開放下單時間（週三 00:00 ～ 週四 20:30（含））
+    if (!isWithinOrderingWindow()) {
+      showErr('目前不在開放點餐時間（週三 00:00 起至週四 20:30 止）。');
+      return;
+    }
+
     // 若購物車包含牛雜鍋，先做前端預檢（不顯示剩餘數）
     const tripeInCart = state.cart.filter(e=> e.type==='pot' && e.pot?.id===LIMIT_ITEM_ID)
                                   .reduce((s,e)=> s + Number(e.qty||0), 0);
@@ -544,25 +572,29 @@ async function onSubmitOrder(e){
       return;
     }
 
-    let dateStr = todayIso();
-    const openToday  = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
-    const closeToday = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+    // 本次服務日固定為週四
+    let dateStr = serviceThursdayIso();
+    const thuOpen  = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+    const thuClose = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
 
+    // 使用者選擇的最早時間（只會是週四的某時段）
     const sel = el('#earliestTime').value;
     let earliest;
     if (sel) {
       earliest = dayjs.tz(`${dateStr} ${sel}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
     } else {
+      // 自動安排：週三下單 → 週四開門；週四下單 → max(現在+備餐, 週四開門)
       const candidate = dayjs().tz().add(STORE.prepBufferMinutes,'minute');
-      if (candidate.isBefore(openToday)) earliest = openToday;
-      else if (candidate.isAfter(closeToday)) {
-        dateStr = dayjs.tz(dateStr,'YYYY-MM-DD','Asia/Taipei').add(1,'day').format('YYYY-MM-DD');
-        earliest = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
-      } else {
-        earliest = candidate;
-      }
+      earliest = candidate.isBefore(thuOpen) ? thuOpen : candidate;
     }
+    // 四捨五入到時段
     const rounded = roundUpToSlot(earliest.toDate(), STORE.slotMinutes);
+
+    // 超出週四打烊就不接受
+    if (dayjs(rounded).isAfter(thuClose)) {
+      showErr('今日（週四）可用時段已結束，請於下週三再行預訂。');
+      return;
+    }
 
     // 取最新 orders + limits（避免同時段競態）
     try{
@@ -581,19 +613,12 @@ async function onSubmitOrder(e){
       }
       slot = rounded;
     } else {
+      // 自動在同一個週四內尋找可用時段；不往翌日/下週延
       slot = autoAssignSlot(dateStr, rounded);
       if (!slot) {
-        const tmr = dayjs.tz(dateStr,'YYYY-MM-DD','Asia/Taipei').add(1,'day').format('YYYY-MM-DD');
-        try {
-          const data = await apiList(tmr);
-          state.ordersCache = data.orders || [];
-          state.limits = data.limits || {};
-        } catch(_){}
-        const tmrOpen = dateAt(tmr, STORE.openHour, STORE.openMinute);
-        slot = autoAssignSlot(tmr, tmrOpen);
-        if (slot) dateStr = tmr;
+        showErr('今日（週四）可用時段已額滿，請於下週三再行預訂。');
+        return;
       }
-      if (!slot) { showErr('近期可用時段已滿，請改天或來電訂餐。'); return; }
     }
 
     const items = [];
@@ -609,14 +634,14 @@ async function onSubmitOrder(e){
     const subtotal = items.reduce((s,it)=> s + it.price*it.qty, 0);
     const order = {
       id: 'O'+Date.now(),
-      date: dateStr,
+      date: dateStr,                          // ← 固定週四
       assignedSlot: slot.toISOString(),
       capacityUnits: needUnits,
       customer: { name, phone },
       items, subtotal, discount: 0, total: subtotal,
       createdAt: new Date().toISOString(),
       source: 'web-customer',
-      pickupNo: nextPickupNoForDate(dateStr) // 暫編，後端覆蓋
+      pickupNo: nextPickupNoForDate(dateStr)  // 暫編，後端覆蓋
     };
 
     const resp = await apiCreate(order);
@@ -664,9 +689,9 @@ async function onSubmitOrder(e){
   }finally{ setBusy(false); }
 }
 
-/* ===== Earliest options ===== */
+/* ===== Earliest options：只顯示服務週四的時段 ===== */
 function populateEarliestTimeOptions(){
-  const sel = el('#earliestTime'); const dateStr = todayIso();
+  const sel = el('#earliestTime'); const dateStr = serviceThursdayIso();
   sel.innerHTML = '<option value="">不指定（系統自動安排）</option>';
   generateSlots(dateStr).forEach(s=>{ const label = slotKey(s); const o=document.createElement('option'); o.value=label; o.textContent=label; sel.appendChild(o); });
 }
@@ -683,8 +708,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   openNotice();
   el('#noticeClose').addEventListener('click', closeNotice);
 
-  // 背景抓今天的 orders + limits，回來後只更新售完狀態（不顯示剩餘數）
-  apiList(todayIso())
+  // 只抓本次服務日（週四）的 orders + limits
+  apiList(serviceThursdayIso())
     .then((data)=>{
       state.ordersCache = data.orders || [];
       state.limits = data.limits || {};
