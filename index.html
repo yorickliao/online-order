@@ -45,7 +45,7 @@
 <main class="mx-auto container-slim px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
   <section class="lg:col-span-2 space-y-8">
     <div class="space-y-3">
-      <h2 class="text-lg font-semibold">火鍋</h2>
+      <h2 class="text-lg font-semibold">火鍋 (一律不付白飯/冬粉/科學麵) </h2>
       <div id="potList" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
     </div>
     <div class="space-y-3">
@@ -283,7 +283,8 @@ function renderPots(){
 }
 
 function renderSides(){
-  const root = el('#sideList'); root.innerHTML='';
+  const root = el('#sideList'); 
+  root.innerHTML='';
   SIDES.forEach(s=>{
     const row = document.createElement('div');
     row.className = 'card bg-white p-4 flex items-center justify-between gap-3';
@@ -294,17 +295,21 @@ function renderSides(){
       </div>
       <div class="flex items-center gap-2">
         <button class="dec btn px-3 py-2 border border-slate-300 hover:bg-slate-100">-</button>
-        <input type="number" min="1" value="1" class="qty w-16 text-center border border-slate-300 rounded-xl py-2 bg-white text-slate-900" />
+        <input type="number" min="0" value="0" class="qty w-16 text-center border border-slate-300 rounded-xl py-2 bg-white text-slate-900" />
         <button class="inc btn px-3 py-2 border border-slate-300 hover:bg-slate-100">+</button>
         <button class="add btn px-3 py-2 bg-slate-900 text-white hover:bg-slate-800">加入</button>
       </div>`;
     const qty = row.querySelector('.qty');
-    row.querySelector('.dec').addEventListener('click', ()=> qty.value = Math.max(1,(parseInt(qty.value)||1)-1));
-    row.querySelector('.inc').addEventListener('click', ()=> qty.value = Math.max(1,(parseInt(qty.value)||1)+1));
-    row.querySelector('.add').addEventListener('click', ()=> addSideToCart(s, parseInt(qty.value)||1));
+    row.querySelector('.dec').addEventListener('click', ()=> qty.value = Math.max(0,(parseInt(qty.value)||0)-1));
+    row.querySelector('.inc').addEventListener('click', ()=> qty.value = Math.max(0,(parseInt(qty.value)||0)+1));
+    row.querySelector('.add').addEventListener('click', ()=>{
+      const n = parseInt(qty.value) || 0;
+      if(n > 0) addSideToCart(s, n);
+    });
     root.appendChild(row);
   });
 }
+
 
 /* ===== Modal ===== */
 let pmCurrent = null;
