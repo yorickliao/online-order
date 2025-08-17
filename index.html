@@ -30,8 +30,17 @@
 
   <!-- 前端測試用：mockNow 支援（強制台北時區） -->
   <script>
-    const __urlMockNowRaw = new URL(location.href).searchParams.get('mockNow');
-
+    // 統一時區常數（保險一次）
+    const STORE_TZ = 'Asia/Taipei';
+  
+    // 讀參數
+    const usp = new URL(location.href).searchParams;
+    const __urlMockNowRaw = usp.get('mockNow') || '';
+  
+    // 先宣告，避免 TDZ
+    let __mockNowParsed = null;
+  
+    // 解析 mockNow（保留你原本的 robust 解析即可）
     function __parseMockNow(raw) {
       if (!raw) return null;
       const s = decodeURIComponent(String(raw).trim());
@@ -43,26 +52,30 @@
       ];
       for (const c of candidates) {
         let d = dayjs(c);
-        if (d.isValid() && /[zZ]|[+-]\d{2}:?\d{2}$/.test(c)) return dayjs.tz(d.toDate(), 'Asia/Taipei');
-        d = dayjs.tz(c, 'YYYY-MM-DDTHH:mm:ssZ', 'Asia/Taipei'); if (d.isValid()) return d;
-        d = dayjs.tz(c, 'YYYY-MM-DDTHH:mmZ',     'Asia/Taipei'); if (d.isValid()) return d;
-        d = dayjs.tz(c, 'YYYY-MM-DD HH:mm:ss',   'Asia/Taipei'); if (d.isValid()) return d;
-        d = dayjs.tz(c, 'YYYY-MM-DD HH:mm',      'Asia/Taipei'); if (d.isValid()) return d;
-        d = dayjs.tz(c, 'YYYY/MM/DD HH:mm',      'Asia/Taipei'); if (d.isValid()) return d;
-        d = dayjs.tz(c, 'YYYY-MM-DD',            'Asia/Taipei'); if (d.isValid()) return d;
+        if (d.isValid() && /[zZ]|[+-]\d{2}:?\d{2}$/.test(c)) return dayjs.tz(d.toDate(), STORE_TZ);
+        d = dayjs.tz(c, 'YYYY-MM-DDTHH:mm:ssZ', STORE_TZ); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DDTHH:mmZ',     STORE_TZ); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DD HH:mm:ss',   STORE_TZ); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DD HH:mm',      STORE_TZ); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY/MM/DD HH:mm',      STORE_TZ); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DD',            STORE_TZ); if (d.isValid()) return d;
       }
       console.warn('[mockNow] 無法解析時間字串：', raw);
       return null;
     }
-
-    const __mockNowParsed = __parseMockNow(__urlMockNowRaw);
-
-    // 強制回傳台北時區時間（有 mockNow 就用它）
+  
+    // 先完成賦值
+    __mockNowParsed = __parseMockNow(__urlMockNowRaw);
+  
+    // 最後才定義 nowTz()，使用上面已初始化的值
     function nowTz(){
-      if (__mockNowParsed && __mockNowParsed.isValid()) return __mockNowParsed;
-      return dayjs().tz('Asia/Taipei');
+      if (__mockNowParsed && typeof __mockNowParsed.isValid === 'function' && __mockNowParsed.isValid()) {
+        return __mockNowParsed;            // 使用 mockNow（Asia/Taipei）
+      }
+      return dayjs().tz(STORE_TZ);          // 沒 mock 時也強制台北時區
     }
   </script>
+
 </head>
 <body class="bg-slate-50 text-slate-900 selection:bg-slate-200 selection:text-slate-900">
 <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
@@ -487,7 +500,7 @@ function renderCart(){
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="font-medium">${e.pot.name}（${e.spice}） ×
-              <input type="number" min="1" value="${e.qty}" class="lineQty w-16 text中心 border border-slate-300 rounded-lg py-1 mx-1 bg-white text-slate-900">
+              <input type="number" min="1" value="${e.qty}" class="lineQty w-16 text-center border border-slate-300 rounded-lg py-1 mx-1 bg-white text-slate-900">
             </div>
             <div class="text-sm text-slate-700 mt-1 break-words">${extrasText}</div>
             ${e.note?`<div class="text-xs text-slate-500 mt-1">${noteText}</div>`:''}
