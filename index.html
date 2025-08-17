@@ -21,11 +21,15 @@
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isSameOrAfter.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isSameOrBefore.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isBetween.js"></script>
   <script>
     dayjs.extend(dayjs_plugin_customParseFormat);
     dayjs.extend(dayjs_plugin_utc);
     dayjs.extend(dayjs_plugin_timezone);
+    dayjs.extend(dayjs_plugin_isSameOrBefore);
     dayjs.extend(dayjs_plugin_isSameOrAfter);
+    dayjs.extend(dayjs_plugin_isBetween);
     const STORE_TZ = 'Asia/Taipei';               /* ← 只在這裡宣告一次 */
     dayjs.tz.setDefault(STORE_TZ);
   </script>
