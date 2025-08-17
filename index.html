@@ -28,12 +28,45 @@
   </script>
   <!-- 前端測試用：mockNow 支援（只改前端，不動後端） -->
   <script>
-    // 用網址參數 ?mockNow=2025-08-13T10:00:00+08:00 假裝現在時間
-    const __urlMockNow = new URL(location.href).searchParams.get('mockNow');
-    function nowTz(){
-      return __urlMockNow ? dayjs.tz(__urlMockNow) : dayjs().tz();
+  // 強韌解析 mockNow：支援多種格式與自動補秒數/時區
+  const __urlMockNowRaw = new URL(location.href).searchParams.get('mockNow');
+
+  function __parseMockNow(raw) {
+    if (!raw) return null;
+    const s = decodeURIComponent(String(raw).trim());
+    // 嘗試幾種常見格式
+    const candidates = [
+      s,                                                // 原字串（若本來就是完整 ISO）
+      s.replace(' ', 'T'),                              // 把空白換成 T
+      /\d{2}:\d{2}$/.test(s) ? s + ':00' : s,           // 補秒
+      /\d{2}:\d{2}$/.test(s.replace(' ', 'T')) ? s.replace(' ', 'T') + ':00' : s.replace(' ', 'T'),
+    ];
+
+    for (const c of candidates) {
+      // 1) 完整 ISO（含時區）
+      let d = dayjs(c);
+      if (d.isValid() && /[zZ]|[+-]\d{2}:?\d{2}$/.test(c)) return dayjs.tz(d.toDate(), 'Asia/Taipei');
+
+      // 2) 指定格式 + 時區
+      d = dayjs.tz(c, 'YYYY-MM-DDTHH:mm:ssZ', 'Asia/Taipei'); if (d.isValid()) return d;
+      d = dayjs.tz(c, 'YYYY-MM-DDTHH:mmZ',     'Asia/Taipei'); if (d.isValid()) return d;
+      d = dayjs.tz(c, 'YYYY-MM-DD HH:mm:ss',   'Asia/Taipei'); if (d.isValid()) return d;
+      d = dayjs.tz(c, 'YYYY-MM-DD HH:mm',      'Asia/Taipei'); if (d.isValid()) return d;
+      d = dayjs.tz(c, 'YYYY/MM/DD HH:mm',      'Asia/Taipei'); if (d.isValid()) return d;
+      d = dayjs.tz(c, 'YYYY-MM-DD',            'Asia/Taipei'); if (d.isValid()) return d; // 若只有日期，當天 00:00
     }
-  </script>
+    console.warn('[mockNow] 無法解析時間字串：', raw);
+    return null;
+  }
+
+  const __mockNowParsed = __parseMockNow(__urlMockNowRaw);
+
+  // 前端統一取得「現在（可被 mock）」的函式
+  function nowTz(){
+    return __mockNowParsed ? __mockNowParsed : dayjs().tz();
+  }
+</script>
+
 </head>
 <body class="bg-slate-50 text-slate-900 selection:bg-slate-200 selection:text-slate-900">
 <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
