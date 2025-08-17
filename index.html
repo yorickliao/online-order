@@ -26,6 +26,14 @@
     const STORE_TZ = 'Asia/Taipei';
     dayjs.tz.setDefault(STORE_TZ);
   </script>
+  <!-- 前端測試用：mockNow 支援（只改前端，不動後端） -->
+  <script>
+    // 用網址參數 ?mockNow=2025-08-13T10:00:00+08:00 假裝現在時間
+    const __urlMockNow = new URL(location.href).searchParams.get('mockNow');
+    function nowTz(){
+      return __urlMockNow ? dayjs.tz(__urlMockNow) : dayjs().tz();
+    }
+  </script>
 </head>
 <body class="bg-slate-50 text-slate-900 selection:bg-slate-200 selection:text-slate-900">
 <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
@@ -97,7 +105,7 @@
 
 <!-- 成功視窗：新增取餐號碼顯示 -->
 <div id="successModal" class="fixed inset-0 z-40 hidden">
-  <div class="absolute inset-0 bg-black/40"></div>
+  <div class="absolute inset-0 bg黑/40"></div>
   <div class="relative z-10 mx-auto mt-24 w-[92%] max-w-xl card bg-white p-6">
     <h3 class="text-xl font-semibold mb-2">下單成功</h3>
     <p class="text-slate-700">您的取餐時段為：</p>
@@ -146,7 +154,7 @@
       <div class="mt-5">
         <label class="text-sm text-slate-600">備註（選填）</label>
         <input id="pmNote" type="text" placeholder=""
-               class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
+               class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg白 text-slate-900" />
       </div>
 
       <div class="mt-6 flex items-center justify-between">
@@ -246,7 +254,7 @@ function generateSlots(dateStr){
 /* ===== 服務週四與開放下單視窗（週三 00:00 → 週四 20:30） ===== */
 // 取得本次服務日（週四）的 YYYY-MM-DD：若現在已過本週四 20:30，則指向下週四。
 function serviceThursdayIso(){
-  const now = dayjs().tz();
+  const now = nowTz(); // ← 改用 mockNow
   const daysToThu = (4 - now.day() + 7) % 7; // 0=Sun ... 4=Thu
   let thu = now.add(daysToThu, 'day').format('YYYY-MM-DD');
   const thuEnd = dayjs.tz(`${thu} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
@@ -257,7 +265,7 @@ function serviceThursdayIso(){
 }
 // 是否在開放點餐時間（以本次服務週四為準）
 function isWithinOrderingWindow(){
-  const now = dayjs().tz();
+  const now = nowTz(); // ← 改用 mockNow
   const thuStr = serviceThursdayIso();
   const thuDay = dayjs.tz(thuStr, 'YYYY-MM-DD', 'Asia/Taipei'); // 週四 00:00
   const wedStart = thuDay.clone().subtract(1, 'day').startOf('day'); // 週三 00:00
@@ -501,7 +509,13 @@ async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000){
 
 // 讀單：回傳整個物件 { ok, orders, limits }
 async function apiList(dateStr){
-  const u = new URL(ENDPOINT); u.searchParams.set('action','list'); if(dateStr) u.searchParams.set('date', dateStr); u.searchParams.set('key', API_KEY);
+  const u = new URL(ENDPOINT);
+  u.searchParams.set('action','list');
+  if(dateStr) u.searchParams.set('date', dateStr);
+  u.searchParams.set('key', API_KEY);
+  // 可選：把 mockNow 一起帶到後端（後端不認也沒差）
+  if (__urlMockNow) u.searchParams.set('mockNow', __urlMockNow);
+
   const r = await fetchWithTimeout(u.toString(), {}, 15000);
   const t = await r.text();
   let d; try{ d = JSON.parse(t) }catch{ throw new Error('bad_json') }
@@ -511,7 +525,11 @@ async function apiList(dateStr){
 
 // 送單：不在這裡丟錯，讓呼叫端判斷 resp.ok / resp.error
 async function apiCreate(order){
-  const r = await fetchWithTimeout(ENDPOINT, { method:'POST', body: JSON.stringify({ apiKey:API_KEY, action:'create', order }) }, 20000);
+  // 可選：POST body 也帶 mockNow（後端不認也沒差）
+  const body = { apiKey:API_KEY, action:'create', order };
+  if (__urlMockNow) body.mockNow = __urlMockNow;
+
+  const r = await fetchWithTimeout(ENDPOINT, { method:'POST', body: JSON.stringify(body) }, 20000);
   const t = await r.text(); let d; try{ d=JSON.parse(t) }catch{ throw new Error('bad_json:'+t.slice(0,200)) }
   return d;
 }
@@ -584,7 +602,7 @@ async function onSubmitOrder(e){
       earliest = dayjs.tz(`${dateStr} ${sel}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
     } else {
       // 自動安排：週三下單 → 週四開門；週四下單 → max(現在+備餐, 週四開門)
-      const candidate = dayjs().tz().add(STORE.prepBufferMinutes,'minute');
+      const candidate = nowTz().add(STORE.prepBufferMinutes,'minute'); // ← 改用 mockNow
       earliest = candidate.isBefore(thuOpen) ? thuOpen : candidate;
     }
     // 四捨五入到時段
