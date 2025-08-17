@@ -55,7 +55,12 @@
     }
 
     const __mockNowParsed = __parseMockNow(__urlMockNowRaw);
-    function nowTz(){ return __mockNowParsed ? __mockNowParsed : dayjs().tz(); }
+    function nowTz() {
+      const mock = new URLSearchParams(location.search).get('mockNow');
+      if (mock) return dayjs.tz(mock, 'Asia/Taipei');
+      return dayjs().tz('Asia/Taipei');
+    }
+
   </script>
 </head>
 <body class="bg-slate-50 text-slate-900 selection:bg-slate-200 selection:text-slate-900">
