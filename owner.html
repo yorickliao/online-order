@@ -289,16 +289,25 @@ function readTripeLimits(limits){
    1) capacityUnits > 0 視為一鍋（主品）
    2) 在下一鍋出現前的所有 capacityUnits == 0 都歸屬於該鍋（加點）
    3) 如果有加點出現在任何鍋之前，歸入 unassigned（會一併顯示在最前面提醒）
-*/
+*
+const STAPLE_ITEMS = ["冬粉","白飯","科學麵"];
+
 function groupItemsByPot(items){
   const groups = [];
   let current = null;
   const unassigned = [];
+  const staples = [];
+
   for (const it of (Array.isArray(items)?items:[])) {
     const qty = Number(it?.qty || 0) || 1;
     const unit = Number(it?.capacityUnits || 0) || 0;
     const name = String(it?.name || '');
-    if (unit > 0) {
+
+    if (STAPLE_ITEMS.some(k => name.includes(k))) {
+      // 主食類獨立存放
+      staples.push({ name, qty });
+    } else if (unit > 0) {
+      // 新鍋
       current = { pot: { name, qty, unit }, addons: [] };
       groups.push(current);
     } else {
@@ -306,12 +315,21 @@ function groupItemsByPot(items){
       else unassigned.push({ name, qty });
     }
   }
-  return { groups, unassigned };
+  return { groups, unassigned, staples };
 }
 
 function renderItemsGroupedHTML(items){
-  const { groups, unassigned } = groupItemsByPot(items);
+  const { groups, unassigned, staples } = groupItemsByPot(items);
   const parts = [];
+
+  if (staples.length){
+    parts.push(`
+      <div class="mb-1">
+        <div class="font-medium text-indigo-700">主食</div>
+        <div class="text-xs text-slate-700 ml-4">${staples.map(a=>`${a.name}×${a.qty}`).join('、')}</div>
+      </div>
+    `);
+  }
 
   if (unassigned.length){
     parts.push(`
@@ -322,7 +340,7 @@ function renderItemsGroupedHTML(items){
     `);
   }
 
-  if (!groups.length && !unassigned.length){
+  if (!groups.length && !unassigned.length && !staples.length){
     return '<div class="text-xs text-slate-500">(無品項)</div>';
   }
 
