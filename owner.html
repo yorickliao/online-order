@@ -157,10 +157,9 @@ const el = s => document.querySelector(s);
 function formatCurrency(n){ return '$' + Number(n||0).toLocaleString('zh-Hant'); }
 function slotKey(iso){ return dayjs(iso).tz().format('HH:mm'); }
 function formatPickupNo(n){ return n ? `#${Number(n)}` : '—'; }
+function pad2(n){ return String(n).padStart(2,'0'); }
 
 /* ===== 週四服務日 + 預約開窗（週三 00:00 → 週四 20:30） ===== */
-function pad2(n){ return String(n).padStart(2,'0'); }
-// 以現在時間推算「本次服務週四」：若已過本週四 20:30，改為下週四
 function serviceThursdayIso(){
   const now = dayjs().tz();
   const daysToThu = (4 - now.day() + 7) % 7; // 0=Sun ... 4=Thu
@@ -209,7 +208,6 @@ async function fetchJson(url, options = {}, timeoutMs = 15000) {
 }
 
 /* ===== 後端 API ===== */
-// 取得整包資料（含 orders 與 limits）
 async function apiList(dateStr){
   const url = new URL(ENDPOINT);
   url.searchParams.set('action','list');
@@ -220,7 +218,7 @@ async function apiList(dateStr){
   dlog('apiList response ←', data);
   if (!data.ok) throw new Error(data.error || 'list_failed');
   updateDebugPanel({ lastUrl:url.toString(), lastOk:data.ok, lastError:data.error||'', count:(data.orders||[]).length, raw:JSON.stringify(data,null,2) });
-  return data; // 回傳 { ok, orders, limits }
+  return data; // { ok, orders, limits }
 }
 async function apiDelete(id){
   dlog('apiDelete →', id);
@@ -233,7 +231,6 @@ async function apiDelete(id){
   updateDebugPanel({ lastUrl:ENDPOINT+' (POST delete)', lastOk:data.ok, lastError:data.error||'', raw:JSON.stringify(data,null,2) });
   return data;
 }
-// 更新完成狀態
 async function apiUpdate(id, done){
   dlog('apiUpdate →', id, done);
   const data = await fetchJson(ENDPOINT, {
@@ -285,6 +282,63 @@ function readTripeLimits(limits){
     used: Number(info.used || 0),
     remaining: Math.max(0, Number(info.remaining || 0))
   };
+}
+
+/* ===== 以鍋為單位分組 ===== */
+/* 規則：
+   1) capacityUnits > 0 視為一鍋（主品）
+   2) 在下一鍋出現前的所有 capacityUnits == 0 都歸屬於該鍋（加點）
+   3) 如果有加點出現在任何鍋之前，歸入 unassigned（會一併顯示在最前面提醒）
+*/
+function groupItemsByPot(items){
+  const groups = [];
+  let current = null;
+  const unassigned = [];
+  for (const it of (Array.isArray(items)?items:[])) {
+    const qty = Number(it?.qty || 0) || 1;
+    const unit = Number(it?.capacityUnits || 0) || 0;
+    const name = String(it?.name || '');
+    if (unit > 0) {
+      current = { pot: { name, qty, unit }, addons: [] };
+      groups.push(current);
+    } else {
+      if (current) current.addons.push({ name, qty });
+      else unassigned.push({ name, qty });
+    }
+  }
+  return { groups, unassigned };
+}
+
+function renderItemsGroupedHTML(items){
+  const { groups, unassigned } = groupItemsByPot(items);
+  const parts = [];
+
+  if (unassigned.length){
+    parts.push(`
+      <div class="mb-1">
+        <div class="font-medium text-red-700">未指定鍋的加點</div>
+        <div class="text-xs text-slate-700 ml-4">${unassigned.map(a=>`${a.name}×${a.qty}`).join('、')}</div>
+      </div>
+    `);
+  }
+
+  if (!groups.length && !unassigned.length){
+    return '<div class="text-xs text-slate-500">(無品項)</div>';
+  }
+
+  for (const g of groups){
+    const addons = g.addons.map(a=>`${a.name}×${a.qty}`).join('、');
+    parts.push(`
+      <div class="mb-1">
+        <div class="inline-flex items-center gap-2">
+          <span class="font-medium">${g.pot.name} ×${g.pot.qty}</span>
+          ${g.pot.unit>1 ? `<span class="badge text-[10px] px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700">等效 ${g.pot.unit}</span>` : ''}
+        </div>
+        ${addons ? `<div class="text-xs text-slate-600 ml-4">加點：${addons}</div>` : ''}
+      </div>
+    `);
+  }
+  return parts.join('');
 }
 
 /* ===== 渲染 ===== */
@@ -345,7 +399,7 @@ function renderOrders(ordersRaw){
       const list = sec.querySelector('.orders');
 
       for (const o of arr) {
-        const itemsText = (Array.isArray(o.items)?o.items:[]).map(it => `${it.name}×${it.qty}`).join('、') || '(無品項)';
+        const itemsHTML = renderItemsGroupedHTML(o.items);
 
         const row = document.createElement('div');
         row.className = `py-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:items-center ${o.done ? 'opacity-60' : ''}`;
@@ -361,7 +415,7 @@ function renderOrders(ordersRaw){
               <span class="text-xs text-slate-500 whitespace-nowrap md:ml-2">${dayjs(o.createdAt).tz().format('HH:mm:ss')} 建立</span>
               ${o.done ? '<span class="badge text-xs px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700">已完成</span>' : ''}
             </div>
-            <div class="text-sm text-slate-700 mt-1 break-words">${itemsText}</div>
+            <div class="text-sm text-slate-700 mt-1 break-words">${itemsHTML}</div>
             <div class="text-xs text-slate-500">
               等效數：${Number(o.capacityUnits||0)} ・ 小計：${formatCurrency(o.subtotal||0)}
               ・ 折扣：${formatCurrency(o.discount||0)} ・ 合計：<span class="mono">${formatCurrency(o.total||0)}</span>
