@@ -284,12 +284,13 @@ function readTripeLimits(limits){
   };
 }
 
-/* ===== 以鍋為單位分組 ===== */
+/* ===== 以鍋為單位分組，另開主食類 ===== */
 /* 規則：
    1) capacityUnits > 0 視為一鍋（主品）
-   2) 在下一鍋出現前的所有 capacityUnits == 0 都歸屬於該鍋（加點）
-   3) 如果有加點出現在任何鍋之前，歸入 unassigned（會一併顯示在最前面提醒）
-*
+   2) 在下一鍋出現前的 capacityUnits == 0 都歸屬於該鍋（加點）
+   3) 「冬粉、白飯、科學麵」歸入主食，不隸屬任何鍋
+   4) 若有加點出現在第一鍋之前，歸入 unassigned 另行提示
+*/
 const STAPLE_ITEMS = ["冬粉","白飯","科學麵"];
 
 function groupItemsByPot(items){
@@ -304,16 +305,16 @@ function groupItemsByPot(items){
     const name = String(it?.name || '');
 
     if (STAPLE_ITEMS.some(k => name.includes(k))) {
-      // 主食類獨立存放
       staples.push({ name, qty });
-    } else if (unit > 0) {
-      // 新鍋
+      continue;
+    }
+    if (unit > 0) {
       current = { pot: { name, qty, unit }, addons: [] };
       groups.push(current);
-    } else {
-      if (current) current.addons.push({ name, qty });
-      else unassigned.push({ name, qty });
+      continue;
     }
+    if (current) current.addons.push({ name, qty });
+    else unassigned.push({ name, qty });
   }
   return { groups, unassigned, staples };
 }
