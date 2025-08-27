@@ -288,10 +288,10 @@ function readTripeLimits(limits){
 /* 規則：
    1) capacityUnits > 0 視為一鍋（主品）
    2) 在下一鍋出現前的 capacityUnits == 0 都歸屬於該鍋（加點）
-   3) 「冬粉、白飯、科學麵」歸入主食，不隸屬任何鍋
+   3) 「冬粉、白飯、科學麵」以 id 精準歸入主食，不隸屬任何鍋
    4) 若有加點出現在第一鍋之前，歸入 unassigned 另行提示
 */
-const STAPLE_ITEMS = ["冬粉","白飯","科學麵"];
+const STAPLE_IDS = ["冬粉","白飯","科學麵"];
 
 function groupItemsByPot(items){
   const groups = [];
@@ -300,21 +300,27 @@ function groupItemsByPot(items){
   const staples = [];
 
   for (const it of (Array.isArray(items)?items:[])) {
-    const qty = Number(it?.qty || 0) || 1;
+    const qty  = Number(it?.qty || 0) || 1;
     const unit = Number(it?.capacityUnits || 0) || 0;
+    const id   = String(it?.id || '');
     const name = String(it?.name || '');
 
-    if (STAPLE_ITEMS.some(k => name.includes(k))) {
+    // 以 id 精準判斷主食，避免備註字串（如「不要冬粉」）造成誤判
+    if (STAPLE_IDS.includes(id)) {
       staples.push({ name, qty });
       continue;
     }
+
     if (unit > 0) {
+      // 新的一鍋
       current = { pot: { name, qty, unit }, addons: [] };
       groups.push(current);
       continue;
     }
+
+    // 非主食、非新鍋 → 加點
     if (current) current.addons.push({ name, qty });
-    else unassigned.push({ name, qty });
+    else unassigned.push({ name, qty }); // 第一鍋之前的加點
   }
   return { groups, unassigned, staples };
 }
