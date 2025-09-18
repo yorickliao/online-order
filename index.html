@@ -223,7 +223,7 @@
   </div>
 </div>
 
-<!-- 主食選擇視窗（新增） -->
+<!-- 主食選擇視窗 -->
 <div id="sideModal" class="fixed inset-0 z-40 hidden scroll-y">
   <div class="absolute inset-0 bg-black/40"></div>
   <div class="relative z-10 min-h-full flex items-start justify-center py-6 px-3">
@@ -294,7 +294,6 @@ const EXTRAS = [
   { id:"蝦球", price:20 },{ id:"大腸", price:50 },{ id:"豆皮", price:30 },
   { id:"豬肉", price:40 }
 ];
-// 牛雜鍋只能加：豆皮、臭豆腐、鴨血、金針菇
 const BEEF_TRIPES_ALLOWED = ["豆皮","臭豆腐","鴨血","金針菇"];
 const SIDES = [{ id:"白飯", price:10 },{ id:"冬粉", price:10 },{ id:"科學麵", price:15 }];
 
@@ -320,7 +319,7 @@ function generateSlots(dateStr){
   return arr;
 }
 
-/* ===== 服務週四與開放下單視窗（週三 00:00 → 週四 20:30） ===== */
+/* ===== 服務週四與開放下單視窗 ===== */
 function serviceThursdayIso(){
   const now = nowTz();
   let daysToThu = (4 - now.day() + 7) % 7;
@@ -381,7 +380,7 @@ function renderPots(){
   });
 }
 
-/* 新：主食以彈窗選數量後加入購物車 */
+/* 主食以彈窗選數量後加入購物車 */
 function renderSides(){
   const root = el('#sideList'); root.innerHTML='';
   SIDES.forEach(s=>{
@@ -497,7 +496,7 @@ function updatePmSubtotal(){
   el('#pmSubtotal').textContent = money(subtotal);
 }
 
-/* ===== 主食 Modal（新增） ===== */
+/* ===== 主食 Modal ===== */
 let smCurrent = null;
 function openSideModal(side){
   smCurrent = side;
@@ -598,7 +597,7 @@ async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000){
   finally{ clearTimeout(timer); }
 }
 
-// 讀單：回傳整個物件 { ok, orders, limits }
+// 讀單：回傳 { ok, orders, limits }
 async function apiList(dateStr){
   const u = new URL(ENDPOINT);
   u.searchParams.set('action','list');
@@ -625,7 +624,14 @@ async function apiCreate(order){
 
 /* ===== Slot helpers ===== */
 function bookedCapacityMap(dateStr){
-  const map={}; (state.ordersCache||[]).filter(o=>o.date===dateStr).forEach(o=>{ const k=slotKey(new Date(o.assignedSlot)); map[k]=(map[k]||0)+(o.capacityUnits||0); }); return map;
+  const map={};
+  (state.ordersCache||[])
+    .filter(o=>o.date===dateStr)
+    .forEach(o=>{
+      const k=slotKey(new Date(o.assignedSlot));
+      map[k]=(map[k]||0)+(o.capacityUnits||0);
+    });
+  return map;
 }
 function cartCapacityUnits(){ return state.cart.reduce((n,e)=> e.type==='pot' ? n + e.pot.capacityUnits*e.qty : n, 0); }
 function autoAssignSlot(dateStr, earliest){
@@ -642,14 +648,35 @@ function isSlotAvailable(dateStr, slotDate, needUnits){
   return used + needUnits <= STORE.slotCapacity;
 }
 
-/* ===== 取餐號碼：前端暫估（最終以後端為準） ===== */
+/* ===== 取餐號碼：前端暫估 ===== */
 function nextPickupNoForDate(dateStr){
   const dayOrders = (state.ordersCache || []).filter(o => o.date === dateStr);
   const maxNo = dayOrders.reduce((m, o) => Math.max(m, Number(o.pickupNo || 0)), 0);
   return maxNo + 1;
 }
 
-/* ===== Submit（僅開放週三 00:00 ～ 週四 20:30；所有訂單一律排本次週四） ===== */
+/* ===== 取餐時間下拉：把額滿的選項禁用 ===== */
+function populateEarliestTimeOptions(){
+  const sel = el('#earliestTime');
+  const dateStr = serviceThursdayIso();
+  const booked = bookedCapacityMap(dateStr);
+
+  // 保留「不指定」
+  sel.innerHTML = '<option value="">不指定（系統自動安排）</option>';
+
+  generateSlots(dateStr).forEach(s=>{
+    const label = slotKey(s);
+    const used = booked[label] || 0;
+    const full = used >= STORE.slotCapacity;
+    const o = document.createElement('option');
+    o.value = label;
+    o.textContent = full ? `${label}（額滿）` : label;
+    o.disabled = full;                   // ← 額滿即禁用
+    sel.appendChild(o);
+  });
+}
+
+/* ===== Submit（僅開放週三 00:00 ～ 週四 20:30） ===== */
 async function onSubmitOrder(e){
   e.preventDefault();
   const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -677,7 +704,7 @@ async function onSubmitOrder(e){
       return;
     }
 
-    let dateStr = serviceThursdayIso();
+    const dateStr = serviceThursdayIso();
     const thuOpen  = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
     const thuClose = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
 
@@ -700,6 +727,8 @@ async function onSubmitOrder(e){
       const data = await apiList(dateStr);
       state.ordersCache = data.orders || [];
       state.limits = data.limits || {};
+      populateEarliestTimeOptions();   // ← 更新下拉額滿狀態
+      renderPots();
     }catch(_){}
 
     let slot = null;
@@ -748,8 +777,9 @@ async function onSubmitOrder(e){
         showErr('牛雜鍋今日限量已達上限，請調整數量或改點其他品項。');
         try{
           const data = await apiList(dateStr);
-          state.ordersCache = data.orders || [];
+          state.ordersCache = data.orders || {};
           state.limits = data.limits || {};
+          populateEarliestTimeOptions();
           renderPots();
         }catch(_){}
         return;
@@ -770,6 +800,7 @@ async function onSubmitOrder(e){
       const data = await apiList(dateStr);
       state.ordersCache = data.orders || [];
       state.limits = data.limits || {};
+      populateEarliestTimeOptions();   // ← 成功後也更新
       renderPots();
     }catch(_){}
 
@@ -781,14 +812,9 @@ async function onSubmitOrder(e){
     else if (m.includes('server:unauthorized')) showErr('伺服器拒絕：金鑰或權限不符。');
     else if (m.startsWith('server:exception')) showErr('伺服器內部錯誤：' + m.replace(/^server:/,''));
     else showErr('送單失敗：' + m.replace(/^server:/,''));
-  }finally{ setBusy(false); }
-}
-
-/* ===== Earliest options：只顯示服務週四的時段 ===== */
-function populateEarliestTimeOptions(){
-  const sel = el('#earliestTime'); const dateStr = serviceThursdayIso();
-  sel.innerHTML = '<option value="">不指定（系統自動安排）</option>';
-  generateSlots(dateStr).forEach(s=>{ const label = slotKey(s); const o=document.createElement('option'); o.value=label; o.textContent=label; sel.appendChild(o); });
+  }finally{
+    setBusy(false);
+  }
 }
 
 /* ===== Notice & Init ===== */
@@ -800,16 +826,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   renderSides();
   renderCart();
-  populateEarliestTimeOptions();
+  populateEarliestTimeOptions(); // 初始先畫（還未含後端資料）
   renderPots();
 
   openNotice();
   el('#noticeClose').addEventListener('click', closeNotice);
 
+  // 抓取本次週四的 orders + limits 後，更新選項的額滿狀態
   apiList(serviceThursdayIso())
     .then((data)=>{
       state.ordersCache = data.orders || [];
       state.limits = data.limits || {};
+      populateEarliestTimeOptions(); // ← 套用最新版額滿資訊
       renderPots();
     })
     .catch(()=>{});
