@@ -45,14 +45,32 @@
         <div class="text-xs text-slate-500">營業 16:30–20:30 ・ 每 15 分鐘上限 7 鍋</div>
       </div>
     </div>
-    <div class="flex items-center gap-2 text-sm">
-      <span class="text-slate-600">最近同步：</span>
-      <span id="lastSync" class="mono text-slate-900">—</span>
+    <div class="flex items-center gap-3 text-sm">
+      <div class="hidden md:flex items-center gap-2">
+        <span class="text-slate-600">接單狀態：</span>
+        <span id="stopBadge" class="badge text-xs px-2 py-1 bg-slate-100 text-slate-700 border border-slate-200">—</span>
+        <button id="btnToggleStop" class="btn px-3 py-1.5 border border-slate-300 hover:bg-slate-100">切換狀態</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-slate-600">最近同步：</span>
+        <span id="lastSync" class="mono text-slate-900">—</span>
+      </div>
     </div>
   </div>
 </header>
 
 <main class="mx-auto container-slim px-4 py-6 space-y-6">
+  <!-- 停止接單 Banner -->
+  <section id="stopBanner" class="hidden card border border-red-200 bg-red-50 p-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="text-red-800">
+        <div class="font-semibold">目前暫停接單</div>
+        <div class="text-sm">顧客前台將無法建立新訂單。需要恢復時，點擊右側按鈕。</div>
+      </div>
+      <button id="btnResumeFromBanner" class="btn px-4 py-2 bg-red-600 text-white hover:bg-red-700">恢復接單</button>
+    </div>
+  </section>
+
   <!-- 控制列 -->
   <section class="card bg-white p-4">
     <div class="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr] gap-3">
@@ -66,6 +84,12 @@
         <button id="btnNextThu" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">下週四</button>
       </div>
       <div class="flex items-center gap-3 md:justify-end">
+        <!-- 小螢幕也能操作接單狀態 -->
+        <div class="md:hidden flex items-center gap-2">
+          <span class="text-slate-600 text-sm">接單：</span>
+          <span id="stopBadgeSm" class="badge text-[10px] px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200">—</span>
+          <button id="btnToggleStopSm" class="btn px-2 py-1 border border-slate-300 hover:bg-slate-100 text-xs">切換</button>
+        </div>
         <button id="btnRefresh" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">刷新</button>
         <label class="flex items-center gap-2 text-sm text-slate-700">
           <input id="autoToggle" type="checkbox" class="scale-110">
@@ -136,7 +160,7 @@
 
 <script>
 /* ===== 基本設定 ===== */
-const ENDPOINT = 'https://script.google.com/macros/s/AKfycbyqdwMwWNvEV2EjWwrOUUGz8NiqaVDZ9Q8th4oJjy3V90cA9wqv2Xa4X9DfkaTv-FuhkQ/exec';
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbyGEMEhNZneKi49PDH5vcMlV6OFhVRIAiAW6R1shj7pFIIjvurtOaP72zvd5nmypSd19Q/exec';
 const API_KEY  = '326hotpot326';
 
 // 簡易密碼（可配合網址 ?pass=xxxxx）
@@ -218,7 +242,7 @@ async function apiList(dateStr){
   dlog('apiList response ←', data);
   if (!data.ok) throw new Error(data.error || 'list_failed');
   updateDebugPanel({ lastUrl:url.toString(), lastOk:data.ok, lastError:data.error||'', count:(data.orders||[]).length, raw:JSON.stringify(data,null,2) });
-  return data; // { ok, orders, limits }
+  return data; // { ok, orders, limits, stopped }
 }
 async function apiDelete(id){
   dlog('apiDelete →', id);
@@ -240,6 +264,26 @@ async function apiUpdate(id, done){
   dlog('apiUpdate response ←', data);
   if (!data.ok) throw new Error(data.error || 'update_failed');
   return data;
+}
+async function apiToggleStop(){
+  dlog('apiToggleStop →');
+  const data = await fetchJson(ENDPOINT, {
+    method:'POST',
+    body: JSON.stringify({ apiKey: API_KEY, action:'toggle_stop' })
+  }, 15000);
+  dlog('apiToggleStop response ←', data);
+  if (!data.ok) throw new Error(data.error || 'toggle_failed');
+  return data; // { ok, stopped }
+}
+async function apiSetStop(flag){
+  dlog('apiSetStop →', flag);
+  const data = await fetchJson(ENDPOINT, {
+    method:'POST',
+    body: JSON.stringify({ apiKey: API_KEY, action:'set_stop', stopped: !!flag })
+  }, 15000);
+  dlog('apiSetStop response ←', data);
+  if (!data.ok) throw new Error(data.error || 'set_stop_failed');
+  return data; // { ok, stopped }
 }
 
 /* ===== 資料清洗 ===== */
@@ -285,14 +329,7 @@ function readTripeLimits(limits){
 }
 
 /* ===== 以鍋為單位分組，另開主食類 ===== */
-/* 規則：
-   1) capacityUnits > 0 視為一鍋（主品）
-   2) 在下一鍋出現前的 capacityUnits == 0 都歸屬於該鍋（加點）
-   3) 「冬粉、白飯、科學麵」以 id 精準歸入主食，不隸屬任何鍋
-   4) 若有加點出現在第一鍋之前，歸入 unassigned 另行提示
-*/
 const STAPLE_IDS = ["冬粉","白飯","科學麵"];
-
 function groupItemsByPot(items){
   const groups = [];
   let current = null;
@@ -305,26 +342,22 @@ function groupItemsByPot(items){
     const id   = String(it?.id || '');
     const name = String(it?.name || '');
 
-    // 以 id 精準判斷主食，避免備註字串（如「不要冬粉」）造成誤判
     if (STAPLE_IDS.includes(id)) {
       staples.push({ name, qty });
       continue;
     }
 
     if (unit > 0) {
-      // 新的一鍋
       current = { pot: { name, qty, unit }, addons: [] };
       groups.push(current);
       continue;
     }
 
-    // 非主食、非新鍋 → 加點
     if (current) current.addons.push({ name, qty });
-    else unassigned.push({ name, qty }); // 第一鍋之前的加點
+    else unassigned.push({ name, qty });
   }
   return { groups, unassigned, staples };
 }
-
 function renderItemsGroupedHTML(items){
   const { groups, unassigned, staples } = groupItemsByPot(items);
   const parts = [];
@@ -364,6 +397,45 @@ function renderItemsGroupedHTML(items){
     `);
   }
   return parts.join('');
+}
+
+/* ===== 接單狀態渲染 ===== */
+function renderStopState(stopped){
+  const b1 = el('#stopBadge');
+  const b2 = el('#stopBadgeSm');
+  const banner = el('#stopBanner');
+  const btnToggle = el('#btnToggleStop');
+  const btnToggleSm = el('#btnToggleStopSm');
+  const btnResumeFromBanner = el('#btnResumeFromBanner');
+
+  const setBadge = (node) => {
+    if (!node) return;
+    node.textContent = stopped ? '已暫停' : '接受中';
+    node.className = 'badge text-xs px-2 py-1 border ' + (stopped
+      ? 'bg-red-50 text-red-700 border-red-200'
+      : 'bg-emerald-50 text-emerald-700 border-emerald-200');
+  };
+
+  setBadge(b1);
+  if (b2) {
+    b2.textContent = stopped ? '暫停' : '接受中';
+    b2.className = 'badge text-[10px] px-2 py-0.5 border ' + (stopped
+      ? 'bg-red-50 text-red-700 border-red-200'
+      : 'bg-emerald-50 text-emerald-700 border-emerald-200');
+  }
+
+  if (banner) banner.classList.toggle('hidden', !stopped);
+  if (btnToggle) btnToggle.textContent = stopped ? '恢復接單' : '暫停接單';
+  if (btnToggleSm) btnToggleSm.textContent = stopped ? '恢復' : '暫停';
+
+  if (btnResumeFromBanner) {
+    btnResumeFromBanner.onclick = async () => {
+      btnResumeFromBanner.disabled = true;
+      try { await apiSetStop(false); await refreshOrders(); }
+      catch (e){ alert('操作失敗，請稍後再試'); }
+      finally { btnResumeFromBanner.disabled = false; }
+    };
+  }
 }
 
 /* ===== 渲染 ===== */
@@ -509,11 +581,11 @@ async function refreshOrders(){
   const dateStr = el('#dateInput').value || serviceThursdayIso();
   dlog('refreshOrders date →', dateStr);
   try{
-    const data = await apiList(dateStr);       // ← 取得 {orders, limits}
+    const data = await apiList(dateStr);       // ← 取得 {orders, limits, stopped}
     const orders = data.orders || [];
     lastLimits = data.limits || {};
-    dlog('orders len:', orders.length, 'limits:', lastLimits);
 
+    renderStopState(!!data.stopped);
     renderOrders(orders);
     renderSummary(sanitizeOrders(orders), lastLimits);
 
@@ -591,6 +663,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     refreshOrders();
   });
   el('#autoToggle').addEventListener('change', (e)=> e.target.checked ? startAuto() : stopAuto());
+
+  // Toggle stop handlers (both desktop and mobile)
+  const attachToggle = (btn) => {
+    if (!btn) return;
+    btn.addEventListener('click', async ()=>{
+      btn.disabled = true;
+      try { await apiToggleStop(); await refreshOrders(); }
+      catch (e){ console.error('toggle_stop_failed', e); alert('切換接單狀態失敗，請稍後再試'); }
+      finally { btn.disabled = false; }
+    });
+  };
+  attachToggle(el('#btnToggleStop'));
+  attachToggle(el('#btnToggleStopSm'));
 
   document.addEventListener('visibilitychange', ()=>{
     if (document.hidden) stopAuto(); else { refreshOrders(); if (el('#autoToggle').checked) startAuto(); }
