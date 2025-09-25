@@ -13,6 +13,8 @@
     input,select,textarea{background:#fff!important;color:#0f172a!important;-webkit-text-fill-color:#0f172a;border-color:#cbd5e1}
     select option{background:#fff;color:#0f172a}
     .scroll-y{overflow-y:auto;-webkit-overflow-scrolling:touch}
+    /* 新增：滿額（disabled）選項維持不可選但不顯示文字，僅以顏色淡化 */
+    select option[disabled]{color:#94a3b8!important}
   </style>
 
   <!-- Day.js + TZ -->
@@ -655,7 +657,7 @@ function nextPickupNoForDate(dateStr){
   return maxNo + 1;
 }
 
-/* ===== 取餐時間下拉：把額滿的選項禁用 ===== */
+/* ===== 取餐時間下拉：把額滿的選項禁用（不顯示文字） ===== */
 function populateEarliestTimeOptions(){
   const sel = el('#earliestTime');
   const dateStr = serviceThursdayIso();
@@ -668,10 +670,19 @@ function populateEarliestTimeOptions(){
     const label = slotKey(s);
     const used = booked[label] || 0;
     const full = used >= STORE.slotCapacity;
+
     const o = document.createElement('option');
+    // 只顯示時間；不加「（額滿）」字
+    o.textContent = label;
+
+    // 仍維持不可選取
+    o.disabled = full;
+    // 讓螢幕閱讀器/滑鼠提示仍可知原因
+    if (full) o.title = '此時段已滿';
+
+    // value 用 ISO（含時區）或 HH:mm 皆可；你原本用 HH:mm，維持不動
     o.value = label;
-    o.textContent = full ? `${label}（額滿）` : label;
-    o.disabled = full;                   // ← 額滿即禁用
+
     sel.appendChild(o);
   });
 }
