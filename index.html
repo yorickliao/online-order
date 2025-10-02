@@ -13,6 +13,7 @@
     input,select,textarea{background:#fff!important;color:#0f172a!important;-webkit-text-fill-color:#0f172a;border-color:#cbd5e1}
     select option{background:#fff;color:#0f172a}
     .scroll-y{overflow-y:auto;-webkit-overflow-scrolling:touch}
+    /* 新增：滿額（disabled）選項維持不可選但不顯示文字，僅以顏色淡化 */
     select option[disabled]{color:#94a3b8!important}
   </style>
 
@@ -160,7 +161,7 @@
 <!-- 火鍋選擇視窗 -->
 <div id="potModal" class="fixed inset-0 z-40 hidden scroll-y">
   <div class="absolute inset-0 bg-black/40"></div>
-  <div class="relative z-10 min-h-full flex items-start justify中心 py-6 px-3">
+  <div class="relative z-10 min-h-full flex items-start justify-center py-6 px-3">
     <div class="w-full max-w-2xl card bg-white p-6 max-h-[85vh] scroll-y">
       <div class="flex items-start justify-between">
         <div class="min-w-0">
@@ -207,7 +208,7 @@
 
 <!-- 公告視窗 -->
 <div id="noticeModal" class="fixed inset-0 z-50 hidden">
-  <div class="absolute inset-0 bg黑/40"></div>
+  <div class="absolute inset-0 bg-black/40"></div>
   <div class="relative z-10 mx-auto mt-16 w-[92%] max-w-xl card bg-white p-6">
     <h3 class="text-xl font-semibold mb-3">公告</h3>
     <ul class="list-disc pl-5 space-y-1 text-slate-800">
@@ -227,7 +228,7 @@
 <!-- 主食選擇視窗 -->
 <div id="sideModal" class="fixed inset-0 z-40 hidden scroll-y">
   <div class="absolute inset-0 bg-black/40"></div>
-  <div class="relative z-10 min-h-full flex items-start justify中心 py-6 px-3">
+  <div class="relative z-10 min-h-full flex items-start justify-center py-6 px-3">
     <div class="w-full max-w-lg card bg-white p-6 max-h-[85vh] scroll-y">
       <div class="flex items-start justify-between">
         <div class="min-w-0">
@@ -396,7 +397,7 @@ function renderSides(){
       </div>
       <div class="mt-3 text-sm text-slate-600">點選以調整數量</div>
       <div class="mt-4 flex justify-end">
-        <button class="btn px-4 py-2 bg-slate-900 text白 hover:bg-slate-800">選擇</button>
+        <button class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">選擇</button>
       </div>`;
     card.querySelector('button').addEventListener('click', ()=> openSideModal(s));
     root.appendChild(card);
@@ -613,20 +614,13 @@ async function apiList(dateStr){
   return d;
 }
 
-// 送單（加入 Content-Type 與 keepalive，並移除送單前的 await list）
+// 送單
 async function apiCreate(order){
   const body = { apiKey:API_KEY, action:'create', order };
   if (__urlMockNowRaw) body.mockNow = __urlMockNowRaw;
 
-  const r = await fetchWithTimeout(ENDPOINT, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify(body),
-    keepalive: true
-  }, 20000);
-
-  const t = await r.text();
-  let d; try{ d=JSON.parse(t) }catch{ throw new Error('bad_json:'+t.slice(0,200)) }
+  const r = await fetchWithTimeout(ENDPOINT, { method:'POST', body: JSON.stringify(body) }, 20000);
+  const t = await r.text(); let d; try{ d=JSON.parse(t) }catch{ throw new Error('bad_json:'+t.slice(0,200)) }
   return d;
 }
 
@@ -669,6 +663,7 @@ function populateEarliestTimeOptions(){
   const dateStr = serviceThursdayIso();
   const booked = bookedCapacityMap(dateStr);
 
+  // 保留「不指定」
   sel.innerHTML = '<option value="">不指定（系統自動安排）</option>';
 
   generateSlots(dateStr).forEach(s=>{
@@ -677,10 +672,17 @@ function populateEarliestTimeOptions(){
     const full = used >= STORE.slotCapacity;
 
     const o = document.createElement('option');
+    // 只顯示時間；不加「（額滿）」字
     o.textContent = label;
+
+    // 仍維持不可選取
     o.disabled = full;
+    // 讓螢幕閱讀器/滑鼠提示仍可知原因
     if (full) o.title = '此時段已滿';
+
+    // value 用 ISO（含時區）或 HH:mm 皆可；你原本用 HH:mm，維持不動
     o.value = label;
+
     sel.appendChild(o);
   });
 }
@@ -732,7 +734,14 @@ async function onSubmitOrder(e){
       return;
     }
 
-    // 送單前不再 await list（避免多一次往返）
+    try{
+      const data = await apiList(dateStr);
+      state.ordersCache = data.orders || [];
+      state.limits = data.limits || {};
+      populateEarliestTimeOptions();   // ← 更新下拉額滿狀態
+      renderPots();
+    }catch(_){}
+
     let slot = null;
     const needUnits = cartCapacityUnits();
 
@@ -798,12 +807,11 @@ async function onSubmitOrder(e){
     el('#pickupNoText').textContent = String(pickupNo);
     el('#successModal').classList.remove('hidden');
 
-    // 成功後再更新一次資料（不影響送單速度）
     try{
       const data = await apiList(dateStr);
       state.ordersCache = data.orders || [];
       state.limits = data.limits || {};
-      populateEarliestTimeOptions();
+      populateEarliestTimeOptions();   // ← 成功後也更新
       renderPots();
     }catch(_){}
 
@@ -840,7 +848,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     .then((data)=>{
       state.ordersCache = data.orders || [];
       state.limits = data.limits || {};
-      populateEarliestTimeOptions();
+      populateEarliestTimeOptions(); // ← 套用最新版額滿資訊
       renderPots();
     })
     .catch(()=>{});
