@@ -615,17 +615,15 @@ async function apiList(dateStr){
 }
 
 // 送單
-
 async function apiCreate(order){
   const body = { apiKey:API_KEY, action:'create', order };
   if (__urlMockNowRaw) body.mockNow = __urlMockNowRaw;
 
-  const r = await fetchWithTimeout(ENDPOINT, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify(body),
-    keepalive: true    // 使用者關頁時提高送成功機率
-  }, 20000);
+  const r = await fetchWithTimeout(ENDPOINT, { method:'POST', body: JSON.stringify(body) }, 20000);
+  const t = await r.text(); let d; try{ d=JSON.parse(t) }catch{ throw new Error('bad_json:'+t.slice(0,200)) }
+  return d;
+}
+
 
   const t = await r.text();
   let d; try{ d=JSON.parse(t) }catch{ throw new Error('bad_json:'+t.slice(0,200)) }
