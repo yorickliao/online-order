@@ -734,13 +734,13 @@ async function onSubmitOrder(e){
       return;
     }
 
-    try{
-      const data = await apiList(dateStr);
-      state.ordersCache = data.orders || [];
-      state.limits = data.limits || {};
-      populateEarliestTimeOptions();   // ← 更新下拉額滿狀態
-      renderPots();
-    }catch(_){}
+    //try{
+      //const data = await apiList(dateStr);
+      //state.ordersCache = data.orders || [];
+      //state.limits = data.limits || {};
+      //populateEarliestTimeOptions();   // ← 更新下拉額滿狀態
+      //renderPots();
+    //}catch(_){}
 
     let slot = null;
     const needUnits = cartCapacityUnits();
