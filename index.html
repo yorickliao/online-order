@@ -624,13 +624,6 @@ async function apiCreate(order){
   return d;
 }
 
-
-  const t = await r.text();
-  let d; try{ d=JSON.parse(t) }catch{ throw new Error('bad_json:'+t.slice(0,200)) }
-  return d;
-}
-
-
 /* ===== Slot helpers ===== */
 function bookedCapacityMap(dateStr){
   const map={};
