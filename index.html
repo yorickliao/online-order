@@ -851,27 +851,33 @@ function closeNotice(){ el('#noticeModal').classList.add('hidden'); document.bod
 document.addEventListener('DOMContentLoaded', ()=>{
   el('#year').textContent = new Date().getFullYear();
 
-  renderSides();
-  renderCart();
-  populateEarliestTimeOptions(); // 初始先畫（還未含後端資料）
-  renderPots();
+  // 初始先顯示載入中（避免還沒拿到 soldout 就先畫出可點按鈕）
+  el('#potList').innerHTML  = '<div class="text-slate-500">載入中…</div>';
+  el('#sideList').innerHTML = '<div class="text-slate-500">載入中…</div>';
+  renderCart(); // 購物車可以先畫
 
-  openNotice();
-  el('#noticeClose').addEventListener('click', closeNotice);
-
-  // 抓取本次週四的 orders + limits + soldout 後，更新 UI
+  // 抓取本次週四資料（含 soldout）
   apiList(serviceThursdayIso())
     .then((data)=>{
       state.ordersCache = data.orders || [];
-      state.limits = data.limits || {};
-      state.soldout = data.soldout || {};   // ← 接住 soldout
+      state.limits     = data.limits || {};
+      state.soldout    = data.soldout || {};   // 先接住 soldout
+
       populateEarliestTimeOptions();
       renderPots();
-      renderSides();                        // ← 讓主食依 soldout 反映
+      renderSides();                            // 有 soldout 才第一次畫主食（白飯會直接已售完）
     })
-    .catch(()=>{});
+    .catch((_err)=>{
+      // 失敗就先畫一版 fallback（沒 soldout）
+      populateEarliestTimeOptions();
+      renderPots();
+      renderSides();
+    });
 
-  // Modal 控制
+  // 公告與其它固定事件綁定
+  openNotice();
+  el('#noticeClose').addEventListener('click', closeNotice);
+
   el('#pmClose').addEventListener('click', closePotModal);
   el('#smClose').addEventListener('click', closeSideModal);
 
@@ -879,6 +885,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   el('#checkoutForm').addEventListener('submit', onSubmitOrder);
   el('#closeSuccess').addEventListener('click', ()=> el('#successModal').classList.add('hidden'));
 });
+
 </script>
 </body>
 </html>
