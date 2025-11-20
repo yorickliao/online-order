@@ -751,41 +751,64 @@ async function onSubmitOrder(e){
       return;
     }
 
-    const dateStr = serviceThursdayIso();
-    const thuOpen  = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
-    const thuClose = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+// ... (在檢查完牛雜鍋數量後，替換以下這段程式碼)
+    const dateStr = serviceThursdayIso();
+    const thuOpen  = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+    const thuClose = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+    const now = nowTz(); // 取得台北時區的當前時間
 
-    const sel = el('#earliestTime').value;
-    let earliest;
-    if (sel) {
-      earliest = dayjs.tz(`${dateStr} ${sel}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
-    } else {
-      const candidate = nowTz().add(STORE.prepBufferMinutes,'minute');
-      earliest = candidate.isBefore(thuOpen) ? thuOpen : candidate;
-    }
-    const rounded = roundUpToSlot(earliest.toDate(), STORE.slotMinutes);
+    // --- 1. 計算硬性最低取餐時間 (絕對不可早於此時間) ---
+    // 即時的最低時間：當前時間 + 備餐緩衝時間 (20分鐘)
+    let absoluteMinTime = now.clone().add(STORE.prepBufferMinutes,'minute');
 
-    if (dayjs(rounded).isAfter(thuClose)) {
-      showErr('今日（週四）可用時段已結束，請於下週三再行預訂。');
-      return;
-    }
+    // 如果現在是週三或週四營業前，最早取餐時間仍為週四的開門時間
+    if (absoluteMinTime.isBefore(thuOpen)) {
+        absoluteMinTime = thuOpen;
+    }
 
-    let slot = null;
-    const needUnits = cartCapacityUnits();
+    // 將最低時間向上取整到最接近的 15 分鐘時段
+    const roundedAbsoluteMinTime = dayjs(roundUpToSlot(absoluteMinTime.toDate(), STORE.slotMinutes));
+    // --- 結束最低時間計算 ---
 
-    if (sel) {
-      if (!isSlotAvailable(dateStr, rounded, needUnits)) {
-        showErr(`您選擇的 ${slotKey(rounded)} 時段已額滿，請改選其他取餐時間。`);
-        return;
-      }
-      slot = rounded;
-    } else {
-      slot = autoAssignSlot(dateStr, rounded);
-      if (!slot) {
-        showErr('今日（週四）可用時段已額滿，請於下週三再行預訂。');
-        return;
-      }
-    }
+    // 檢查連最早的時段是否都已超過營業時間
+    if (roundedAbsoluteMinTime.isAfter(thuClose)) {
+        showErr('今日（週四）可用時段已結束，請於下週三再行預訂。');
+        return;
+    }
+    
+    const sel = el('#earliestTime').value;
+    let slot = null;
+    const needUnits = cartCapacityUnits();
+
+    if (sel) {
+        // 2. 顧客指定了特定時間
+        const selectedTimeSlot = dayjs.tz(`${dateStr} ${sel}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+        
+        // 檢查指定的時段是否早於硬性最低時間（週四當天才會執行此檢查，符合您的要求）
+        if (selectedTimeSlot.isBefore(roundedAbsoluteMinTime)) {
+            const minTimeStr = roundedAbsoluteMinTime.format('HH:mm');
+            showErr(`您選擇的取餐時間已過或不足備餐時間，最早可取餐時間為 ${minTimeStr}，請重新選擇。`);
+            return;
+        }
+        
+        // 檢查指定時段的容量
+        if (!isSlotAvailable(dateStr, selectedTimeSlot.toDate(), needUnits)) {
+            showErr(`您選擇的 ${slotKey(selectedTimeSlot.toDate())} 時段已額滿，請改選其他取餐時間。`);
+            return;
+        }
+        slot = selectedTimeSlot.toDate();
+
+    } else {
+        // 3. 顧客未指定時間（系統自動安排）
+        // 從硬性最低時間開始搜索第一個有容量的時段
+        slot = autoAssignSlot(dateStr, roundedAbsoluteMinTime.toDate());
+
+        if (!slot) {
+            showErr('今日（週四）可用時段已額滿，請於下週三再行預訂。');
+            return;
+        }
+    }
+// ... (繼續後續的程式碼：建構 items, subtotal, order 等)
 
     const items = [];
     state.cart.forEach(e=>{
