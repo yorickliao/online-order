@@ -787,7 +787,7 @@ async function onSubmitOrder(e){
         // 檢查指定的時段是否早於硬性最低時間（週四當天才會執行此檢查，符合您的要求）
         if (selectedTimeSlot.isBefore(roundedAbsoluteMinTime)) {
             const minTimeStr = roundedAbsoluteMinTime.format('HH:mm');
-            showErr(`您選擇的取餐時間已過或不足備餐時間，最早可取餐時間為 ${minTimeStr}，請重新選擇。`);
+            showErr(`您選擇的取餐時間已過或不足備餐時間，請重新選擇。`);
             return;
         }
         
