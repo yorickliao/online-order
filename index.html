@@ -319,11 +319,11 @@ const EXTRAS = [
   { id:"金針菇", price:10 },{ id:"臭豆腐", price:20 },{ id:"貢丸", price:20 },{ id:"魚餃", price:20 },
   { id:"燕餃", price:20 },{ id:"黑輪", price:20 },{ id:"米血", price:20 },{ id:"鴨血", price:20 },
   { id:"蝦球", price:20 },{ id:"大腸", price:50 },{ id:"豆皮", price:30 },
-  { id:"豬肉", price:40 },{ id:"高麗菜", price:20} ,{ id:"牛腸", price:50 },{ id:"豬腸", price:50 }
+  { id:"豬肉", price:40 },{ id:"高麗菜", price:20} ,{ id:"牛腸", price:50 }
 ];
 
 
-const BEEF_TRIPES_ALLOWED = ["豆皮","臭豆腐","鴨血","金針菇","高麗菜","豬腸", "牛腸"];
+const BEEF_TRIPES_ALLOWED = ["豆皮","臭豆腐","鴨血","金針菇","高麗菜","大腸", "牛腸"];
 const SIDES = [{ id:"白飯", price:10 },{ id:"冬粉", price:10 },{ id:"科學麵", price:15 }];
 
 /* ===== 狀態 & 小工具 ===== */
@@ -481,7 +481,7 @@ function openPotModal(pot){
   const ex = el('#pmExtras'); ex.innerHTML='';
   const extrasList = pot.id === LIMIT_ITEM_ID 
     ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id)) 
-    : EXTRAS.filter(e => e.id !== '牛腸','豬腸');
+    : EXTRAS.filter(e => e.id !== '牛腸');
 
   extrasList.forEach(e=>{
     const row=document.createElement('div');
