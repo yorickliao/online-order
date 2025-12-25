@@ -507,8 +507,16 @@ function openPotModal(pot){
         <button class="inc btn px-2 py-1 border border-slate-300 hover:bg-slate-100">+</button>
       </div>`;
     const qty = row.querySelector('.exQty');
-    row.querySelector('.dec').addEventListener('click', ()=> qty.value = Math.max(0,(parseInt(qty.value)||0)-1));
-    row.querySelector('.inc').addEventListener('click', ()=> qty.value = Math.max(0,(parseInt(qty.value)||0)+1));
+    row.querySelector('.dec').addEventListener('click', ()=>{
+      qty.value = Math.max(0,(parseInt(qty.value)||0)-1);
+      updatePmSubtotal(); // ★ 補這行
+    });
+    
+    row.querySelector('.inc').addEventListener('click', ()=>{
+      qty.value = Math.max(0,(parseInt(qty.value)||0)+1);
+      updatePmSubtotal(); // ★ 補這行
+    });
+
     qty.addEventListener('input', updatePmSubtotal);
     ex.appendChild(row);
   });
@@ -555,13 +563,22 @@ function openPotModal(pot){
 }
 function closePotModal(){ el('#potModal').classList.add('hidden'); document.body.classList.remove('overflow-hidden'); pmCurrent=null; }
 function updatePmSubtotal(){
-  if(!pmCurrent) return;
-  const potQty = Math.max(1, parseInt(el('#pmQty').value)||1);
+  if (!pmCurrent) return;
+
+  const potQty = Math.max(1, parseInt(el('#pmQty').value) || 1);
   let subtotal = pmCurrent.price * potQty;
-  const list = pmCurrent.id === LIMIT_ITEM_ID ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id)) : EXTRAS;
-  el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{ subtotal += list[i].price * Math.max(0, parseInt(q.value)||0); });
+
+  el('#pmExtras').querySelectorAll('.exQty').forEach((q, i) => {
+    const n = Math.max(0, parseInt(q.value) || 0);
+    if (n > 0) {
+      const e = pmExtrasList[i]; // ★ 一定用畫面那份
+      subtotal += e.price * n;
+    }
+  });
+
   el('#pmSubtotal').textContent = money(subtotal);
 }
+
 
 /* ===== 主食 Modal ===== */
 let smCurrent = null;
