@@ -449,6 +449,8 @@ function renderSides(){
 
 /* ===== 火鍋 Modal ===== */
 let pmCurrent = null;
+let pmExtrasList = [];
+
 function openPotModal(pot){
   pmCurrent = pot; document.body.classList.add('overflow-hidden');
   el('#pmTitle').textContent = pot.name;
@@ -491,6 +493,8 @@ function openPotModal(pot){
     // 其他鍋：只過濾掉牛腸 (兩個新選項都會出現)
     extrasList = EXTRAS.filter(e => e.id !== '牛腸');
   }
+  pmExtrasList = extrasList; // ★ 關鍵：畫面與讀值共用同一份
+
 
   extrasList.forEach(e=>{
     const row=document.createElement('div');
@@ -532,11 +536,18 @@ function openPotModal(pot){
     const spice = el('#pmSpice').value;
     const note = el('#pmNote').value.trim();
     const extras = [];
-    const list = pmCurrent.id === LIMIT_ITEM_ID ? EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id)) : EXTRAS;
-    el('#pmExtras').querySelectorAll('.exQty').forEach((q,i)=>{
-      const n = Math.max(0, parseInt(q.value)||0);
-      if(n>0) extras.push({ id:list[i].id, price:list[i].price, qty:n });
+    el('#pmExtras').querySelectorAll('.exQty').forEach((q, i) => {
+      const n = Math.max(0, parseInt(q.value) || 0);
+      if (n > 0) {
+        const e = pmExtrasList[i]; // ← 跟畫面完全一致
+        extras.push({
+          id: e.id,
+          price: e.price,
+          qty: n
+        });
+      }
     });
+
     addPotToCart({ pot: pmCurrent, spice, qty, note, extras });
   };
 
