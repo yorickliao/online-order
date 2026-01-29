@@ -3,58 +3,975 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>326臭臭鍋 - 系統遷移公告</title>
+  <title>326臭臭鍋 線上點餐</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <meta http-equiv="refresh" content="5;url=https://pos-system-lac-eight.vercel.app/">
+  <meta name="color-scheme" content="light">
   <style>
-    .card { border-radius: 1.5rem; }
-    .btn { border-radius: 1rem; transition: all 0.3s ease; }
-    body { background-color: #f8fafc; }
+    .card{border-radius:1rem}.btn{border-radius:1rem}.badge{border-radius:999px}
+    .container-slim{max-width:1200px}.mono{font-variant-numeric:tabular-nums}
+    input,select,textarea,option,button{color-scheme:light}
+    input,select,textarea{background:#fff!important;color:#0f172a!important;-webkit-text-fill-color:#0f172a;border-color:#cbd5e1}
+    select option{background:#fff;color:#0f172a}
+    .scroll-y{overflow-y:auto;-webkit-overflow-scrolling:touch}
+    /* 新增：滿額（disabled）選項維持不可選但不顯示文字，僅以顏色淡化 */
+    select option[disabled]{color:#94a3b8!important}
   </style>
-</head>
 
-<body class="flex items-center justify-center min-h-screen p-4">
-
-  <main class="max-w-md w-full text-center">
-    <div class="w-24 h-24 bg-slate-900 text-white rounded-2xl grid place-items-center text-3xl font-bold mx-auto mb-8 shadow-lg">
-      店
-    </div>
-
-    <div class="card bg-white p-8 shadow-xl border border-slate-100">
-      <h1 class="text-2xl font-bold text-slate-900 mb-4">我們搬家囉！</h1>
-      
-      <p class="text-slate-600 mb-2">
-        感謝您對 <span class="font-semibold text-slate-800">326臭臭鍋</span> 的支持。
-      </p>
-      <p class="text-slate-500 mb-8 text-sm">
-        舊版點餐系統已正式停用，請前往新網址進行點餐，享受更流暢的服務。
-      </p>
-
-      <a href="https://pos-system-lac-eight.vercel.app/" 
-         class="btn block w-full bg-slate-900 text-white py-4 px-6 text-lg font-bold hover:bg-slate-800 hover:scale-105 active:scale-95 shadow-md">
-        前往新網址點餐
-      </a>
-
-      <p class="mt-6 text-xs text-slate-400">
-        系統將在 <span id="countdown" class="font-bold text-slate-600">5</span> 秒後自動為您跳轉
-      </p>
-    </div>
-
-    <footer class="mt-8 text-slate-400 text-xs">
-      © 2026 326臭臭鍋. All Rights Reserved.
-    </footer>
-  </main>
-
+  <!-- Day.js + TZ -->
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isSameOrAfter.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isSameOrBefore.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isBetween.js"></script>
   <script>
-    // 倒數計時視覺效果
-    let seconds = 5;
-    const countdownEl = document.getElementById('countdown');
-    const timer = setInterval(() => {
-      seconds--;
-      if (countdownEl) countdownEl.textContent = seconds;
-      if (seconds <= 0) clearInterval(timer);
-    }, 1000);
+    dayjs.extend(dayjs_plugin_customParseFormat);
+    dayjs.extend(dayjs_plugin_utc);
+    dayjs.extend(dayjs_plugin_timezone);
+    dayjs.extend(dayjs_plugin_isSameOrBefore);
+    dayjs.extend(dayjs_plugin_isSameOrAfter);
+    dayjs.extend(dayjs_plugin_isBetween);
+    const STORE_TZ = 'Asia/Taipei';
+    dayjs.tz.setDefault(STORE_TZ);
   </script>
 
+  <!-- 前端測試用：mockNow 支援（強制台北時區） -->
+  <script>
+    const usp = new URL(location.href).searchParams;
+    const __urlMockNowRaw = usp.get('mockNow') || '';
+    let __mockNowParsed = null;
+
+    function __parseMockNow(raw) {
+      if (!raw) return null;
+      const s = decodeURIComponent(String(raw).trim());
+      const candidates = [
+        s,
+        s.replace(' ', 'T'),
+        /\d{2}:\d{2}$/.test(s) ? s + ':00' : s,
+        /\d{2}:\d{2}$/.test(s.replace(' ', 'T')) ? s.replace(' ', 'T') + ':00' : s.replace(' ', 'T'),
+      ];
+      for (const c of candidates) {
+        let d = dayjs(c);
+        if (d.isValid() && /[zZ]|[+-]\d{2}:?\d{2}$/.test(c)) return dayjs.tz(d.toDate(), STORE_TZ);
+        d = dayjs.tz(c, 'YYYY-MM-DDTHH:mm:ssZ', STORE_TZ); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DDTHH:mmZ',     STORE_TZ); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DD HH:mm:ss',   STORE_TZ); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DD HH:mm',      STORE_TZ); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY/MM/DD HH:mm',      STORE_TZ); if (d.isValid()) return d;
+        d = dayjs.tz(c, 'YYYY-MM-DD',            STORE_TZ); if (d.isValid()) return d;
+      }
+      console.warn('[mockNow] 無法解析時間字串：', raw);
+      return null;
+    }
+    __mockNowParsed = __parseMockNow(__urlMockNowRaw);
+
+    function nowTz(){
+      if (__mockNowParsed && typeof __mockNowParsed.isValid === 'function' && __mockNowParsed.isValid()) {
+        return __mockNowParsed;
+      }
+      return dayjs().tz(STORE_TZ);
+    }
+  </script>
+</head>
+
+<body class="bg-slate-50 text-slate-900 selection:bg-slate-200 selection:text-slate-900">
+<header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
+  <div class="mx-auto container-slim px-4 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 bg-slate-900 text-white rounded-xl grid place-items-center text-lg font-bold select-none">店</div>
+      <div>
+        <div class="text-xl font-semibold">326臭臭鍋 線上點餐</div>
+        <div class="text-xs text-slate-500">營業時間: 週四 16:30–20:30 </div>
+        <div class="text-xs text-slate-500">地址: 台南市安南區安通路四段119巷30弄2號 </div>
+        <div class="text-xs text-slate-500">
+          LINE: 
+          <a href="https://line.me/R/ti/p/@077vslag?from=page&amp;searchId=077vslag"
+             class="underline"
+             target="_blank"
+             rel="noopener noreferrer">
+            @077vslag
+          </a>
+        </div>
+      </div>
+    </div>
+    <a href="#cart" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">購物車</a>
+  </div>
+</header>
+
+<main class="mx-auto container-slim px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+  <section class="lg:col-span-2 space-y-8">
+    <div class="space-y-3">
+      <h2 class="text-lg font-semibold">火鍋 (一律不附白飯/冬粉/科學麵) </h2>
+      <div id="potList" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+    </div>
+    <div class="space-y-3">
+      <h2 class="text-lg font-semibold">主食</h2>
+      <div id="sideList" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+    </div>
+  </section>
+
+  <aside id="cart"
+    class="space-y-6 lg:sticky lg:top-[88px] lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:pr-1"
+    style="-webkit-overflow-scrolling: touch;">
+    <div class="card bg-white p-5">
+      <h2 class="text-lg font-semibold mb-4">購物車</h2>
+      <div id="cartItems" class="space-y-3"></div>
+      <div class="border-t pt-4 mt-4 flex items-center justify-between text-lg font-semibold">
+        <div>總計</div>
+        <div id="cartTotal" class="mono">$0</div>
+      </div>
+      <button id="clearCart" class="mt-3 w-full btn px-4 py-2 border border-slate-300 hover:bg-slate-100">清空購物車</button>
+    </div>
+  
+    <div class="card bg-white p-5">
+      <h2 class="text-lg font-semibold mb-4">取餐資訊</h2>
+      <form id="checkoutForm" class="space-y-4" autocomplete="off">
+        <div>
+          <label class="text-sm text-slate-600">姓名</label>
+          <input required id="customerName" type="text"
+                 class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
+        </div>
+        <div>
+          <label class="text-sm text-slate-600">電話</label>
+          <input required id="customerPhone" type="tel" pattern="[0-9\-+\s]{8,}" placeholder="09xx-xxx-xxx"
+                 class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
+        </div>
+        <div>
+          <label class="text-sm text-slate-600">取餐時間（選填）</label>
+          <select id="earliestTime"
+                  class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900">
+            <option value="">不指定（系統自動安排）</option>
+          </select>
+          <p class="text-xs text-slate-500 mt-1">未選時，系統會自動從最早可取餐時間開始排。</p>
+        </div>
+        <button type="submit" class="w-full btn px-4 py-3 bg-slate-900 text-white hover:bg-slate-800">送出訂單</button>
+        <p id="formError" class="text-sm text-red-600"></p>
+      </form>
+    </div>
+  </aside>
+</main>
+
+<!-- 成功視窗 -->
+<div id="successModal" class="fixed inset-0 z-40 hidden">
+  <div class="absolute inset-0 bg-black/40"></div>
+  <div class="relative z-10 mx-auto mt-24 w-[92%] max-w-xl card bg-white p-6">
+    <h3 class="text-xl font-semibold mb-2">下單成功</h3>
+    <p class="text-slate-700">您的取餐時段為：</p>
+    <p id="assignedSlotText" class="text-2xl font-bold mt-1"></p>
+    <p class="text-slate-700 mt-3">您的取餐號碼：</p>
+    <p id="pickupNoText" class="text-3xl font-extrabold tracking-wider mt-1"></p>
+    <div class="mt-4 flex justify-end">
+      <button id="closeSuccess" class="btn px-4 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 火鍋選擇視窗 -->
+<div id="potModal" class="fixed inset-0 z-40 hidden scroll-y">
+  <div class="absolute inset-0 bg-black/40"></div>
+  <div class="relative z-10 min-h-full flex items-start justify-center py-6 px-3">
+    <div class="w-full max-w-2xl card bg-white p-6 max-h-[85vh] scroll-y">
+      <div class="flex items-start justify-between">
+        <div class="min-w-0">
+          <h3 id="pmTitle" class="text-xl font-semibold"></h3>
+          <div id="pmCapNote" class="text-sm mt-1"></div>
+        </div>
+        <button id="pmClose" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div>
+          <label class="text-sm text-slate-600">辣度</label>
+          <select id="pmSpice" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900"></select>
+        </div>
+        <div>
+          <label class="text-sm text-slate-600">數量</label>
+          <div class="mt-1 flex items-center gap-2">
+            <button id="pmDec" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">-</button>
+            <input id="pmQty" type="number" min="1" value="1" class="w-20 text-center border border-slate-300 rounded-xl py-2 bg-white text-slate-900" />
+            <button id="pmInc" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-5">
+        <label class="text-sm text-slate-600">加點（單點）</label>
+        <div id="pmExtras" class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+        <p class="text-xs text-slate-500 mt-1">單點數量不會跟著火鍋數量倍增，若需相同份數請自行調整。</p>
+      </div>
+
+      <div class="mt-5">
+        <label class="text-sm text-slate-600">備註（選填）</label>
+        <input id="pmNote" type="text" placeholder=""
+               class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 bg-white text-slate-900" />
+      </div>
+
+      <div class="mt-6 flex items-center justify-between">
+        <div class="text-lg">小計：<span id="pmSubtotal" class="font-semibold mono">$0</span></div>
+        <button id="pmAdd" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">加入購物車</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 公告視窗 -->
+<div id="noticeModal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/40"></div>
+  <div class="relative z-10 mx-auto mt-16 w-[92%] max-w-xl card bg-white p-6">
+    <h3 class="text-xl font-semibold mb-3">公告</h3>
+    <ul class="list-disc pl-5 space-y-1 text-slate-800">
+      <li>一律不附白飯／冬粉／科學麵／醬料</li>
+      <li>限現金</li>
+      <li>請勿提早到（不好停車）</li>
+      <li>僅限外帶</li>
+      <li>2026/02/01起工作室改為週三及週六營業</li>
+      <li>武聖夜市將營業至 2026/01/31</li>
+      <li>不提供醬料！！！！！！！！！！！！</li>
+    </ul>
+    <div class="mt-5 flex justify-end">
+      <button id="noticeClose" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">我知道了</button>
+    </div>
+  </div>
+</div>
+
+<!-- 主食選擇視窗 -->
+<div id="sideModal" class="fixed inset-0 z-40 hidden scroll-y">
+  <div class="absolute inset-0 bg-black/40"></div>
+  <div class="relative z-10 min-h-full flex items-start justify-center py-6 px-3">
+    <div class="w-full max-w-lg card bg-white p-6 max-h-[85vh] scroll-y">
+      <div class="flex items-start justify-between">
+        <div class="min-w-0">
+          <h3 id="smTitle" class="text-xl font-semibold"></h3>
+          <div id="smPrice" class="text-sm text-slate-600 mono mt-1"></div>
+        </div>
+        <button id="smClose" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">關閉</button>
+      </div>
+
+      <div class="mt-4">
+        <label class="text-sm text-slate-600">數量</label>
+        <div class="mt-1 flex items-center gap-2">
+          <button id="smDec" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">-</button>
+          <input id="smQty" type="number" min="1" value="1" class="w-20 text-center border border-slate-300 rounded-xl py-2 bg-white text-slate-900" />
+          <button id="smInc" class="btn px-3 py-2 border border-slate-300 hover:bg-slate-100">+</button>
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center justify-between">
+        <div class="text-lg">小計：<span id="smSubtotal" class="font-semibold mono">$0</span></div>
+        <button id="smAdd" class="btn px-4 py-2 bg-slate-900 text-white hover:bg-slate-800">加入購物車</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="text-center text-slate-600 text-sm py-6 border-t border-slate-200 mt-12">
+  <p>© <span id="year"></span> 本網站設計與系統製作：<span class="font-medium text-slate-800">Yorick</span></p>
+  <p class="mt-1">
+    <a href="mailto:yorick.liao@gmail.com" class="hover:underline">聯絡信箱：yorick.liao@gmail.com</a>
+  </p>
+</footer>
+<script>
+/* ===== soldout 快取機制（前端） ===== */
+const SOLDOUT_CACHE_KEY = 'soldout_v1';
+const SOLDOUT_CACHE_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 小時
+
+function loadSoldoutCache() {
+  try {
+    const j = JSON.parse(localStorage.getItem(SOLDOUT_CACHE_KEY) || 'null');
+    if (!j) return {};
+    if (Date.now() - (j.t || 0) > SOLDOUT_CACHE_MAX_AGE_MS) return {};
+    return j.data || {};
+  } catch (_) { return {}; }
+}
+function saveSoldoutCache(map) {
+  try {
+    localStorage.setItem(SOLDOUT_CACHE_KEY, JSON.stringify({ t: Date.now(), data: map || {} }));
+  } catch (_) {}
+}
+
+/* ===== 基本設定 ===== */
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbw95gYEEC3MVpOpbVb70y2FF_BR8JoTOcFIUVpH877a329jCdDKuXeVzHAyc0TPY5-Lig/exec';
+const API_KEY  = '326hotpot326';
+
+const STORE = {
+  openHour: 16, openMinute: 30,
+  closeHour: 20, closeMinute: 30,
+  slotMinutes: 15, slotCapacity: 7,
+  prepBufferMinutes: 20
+};
+
+const LIMIT_ITEM_ID = '牛雜鍋';
+
+/* ===== 商品資料 ===== */
+const SPICE = ["無辣","小辣","中辣","大辣"];
+const POTS = [
+  { id:"臭臭鍋",   name:"臭臭鍋",   price:100, capacityUnits:1, spiceOpts:SPICE },
+  { id:"鴨血鍋",   name:"鴨血鍋",   price:90,  capacityUnits:1, spiceOpts:SPICE },
+  { id:"泡菜鍋",   name:"泡菜鍋",   price:110, capacityUnits:1, spiceOpts:SPICE.filter(s=>s!=="無辣") },
+  { id:"什錦鍋",   name:"什錦鍋",   price:130, capacityUnits:1, spiceOpts:SPICE },
+  { id:"腸旺鍋",   name:"腸旺鍋",   price:130, capacityUnits:1, spiceOpts:SPICE },
+  { id:"牛雜鍋",   name:"牛雜鍋",   price:150, capacityUnits:1, spiceOpts:SPICE },
+  { id:"大腸鴨血鍋", name:"大腸鴨血鍋", price:140, capacityUnits:1, spiceOpts:SPICE },
+];
+const EXTRAS = [
+  { id:"蟹肉棒", price:20 },{ id:"鱈魚丸", price:20 },{ id:"北海翅", price:20 },{ id:"鑫鑫腸", price:20 },
+  { id:"金針菇", price:10 },{ id:"臭豆腐", price:20 },{ id:"貢丸", price:20 },{ id:"魚餃", price:20 },
+  { id:"燕餃", price:20 },{ id:"黑輪", price:20 },{ id:"米血", price:20 },{ id:"鴨血", price:20 },
+  { id:"蝦球", price:20 },{ id:"大腸", price:50 },{ id:"豆皮", price:30 },
+  { id:"豬肉", price:40 },{ id:"高麗菜", price:20} ,{ id:"牛腸", price:50 },{ id:"豬肉換牛肉", price:10 },
+  { id:"牛肉", price:50 }
+];
+
+
+const BEEF_TRIPES_ALLOWED = ["豆皮","臭豆腐","鴨血","金針菇","高麗菜","大腸", "牛腸"];
+const SIDES = [{ id:"白飯", price:10 },{ id:"冬粉", price:10 },{ id:"科學麵", price:15 }];
+
+/* ===== 狀態 & 小工具 ===== */
+const el = s => document.querySelector(s);
+
+// 使用快取初始化（如果沒有快取 → 預設全部可點）
+const cachedSO = loadSoldoutCache();
+
+const state = { cart: [], ordersCache: [], limits: {}, soldout: cachedSO }; // 帶入快取
+const isSO = (id) => !!(state.soldout && state.soldout[id]);
+
+const pad2 = n => String(n).padStart(2,'0');
+const money = n => '$' + Number(n||0).toLocaleString('zh-Hant');
+
+function dateAt(dateStr, h, m){
+  return dayjs.tz(`${dateStr} ${pad2(h)}:${pad2(m)}`,'YYYY-MM-DD HH:mm','Asia/Taipei').toDate();
+}
+function roundUpToSlot(d, minutes){ const ms=minutes*60*1000; return new Date(Math.ceil(d.getTime()/ms)*ms); }
+function slotKey(d){ return dayjs(d).tz().format('HH:mm'); }
+function generateSlots(dateStr){
+  const start = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+  const end   = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+  const arr = [];
+  for (let t = start.clone(); !t.isAfter(end); t = t.add(STORE.slotMinutes,'minute')) {
+    arr.push(t.toDate());
+  }
+  return arr;
+}
+
+/* ===== 服務週四與開放下單視窗 ===== */
+function serviceThursdayIso(){
+  const now = nowTz();
+  let daysToThu = (4 - now.day() + 7) % 7;
+  let thu = now.add(daysToThu, 'day').startOf('day');
+  const thuEnd = thu.clone().hour(STORE.closeHour).minute(STORE.closeMinute).second(59);
+  if (now.isAfter(thuEnd)) {
+    thu = thu.add(7,'day');
+  }
+  return thu.format('YYYY-MM-DD');
+}
+function isWithinOrderingWindow(){
+  const now = nowTz();
+  const thuStr = serviceThursdayIso();
+  const thuDay = dayjs.tz(thuStr, 'YYYY-MM-DD', 'Asia/Taipei');
+  const wedStart = thuDay.clone().subtract(1, 'day').startOf('day');
+  const thuEnd   = thuDay.clone().hour(STORE.closeHour).minute(STORE.closeMinute).second(59);
+  return now.isSameOrAfter(wedStart) && now.isSameOrBefore(thuEnd);
+}
+
+/* ===== 牛雜鍋剩餘量（不顯示給客人） ===== */
+function tripeRemaining(){
+  const info = state.limits && state.limits[LIMIT_ITEM_ID];
+  if (!info) return Infinity;
+  return Number(info.remaining || 0);
+}
+
+/* ===== Render pots & sides ===== */
+function renderPots(){
+  const root = el('#potList'); root.innerHTML='';
+  const remain = tripeRemaining();
+
+  POTS.forEach(p=>{
+    const isTripe = p.id === LIMIT_ITEM_ID;
+    const soldOut = isTripe && remain !== Infinity && remain <= 0;
+
+    const card = document.createElement('div');
+    card.className = 'card bg-white p-4 flex flex-col';
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h3 class="text-lg font-semibold">${p.name}</h3>
+        </div>
+        <div class="text-right font-semibold mono">${money(p.price)}</div>
+      </div>
+      <div class="mt-3 text-sm text-slate-600">點選以選擇辣度、單點、備註</div>
+      <div class="mt-4 flex justify-end">
+        <button class="btn px-4 py-2 ${soldOut?'bg-slate-200 text-slate-500 cursor-not-allowed':'bg-slate-900 text-white hover:bg-slate-800'}">
+          ${soldOut?'已售完':'選擇'}
+        </button>
+      </div>`;
+    const btn = card.querySelector('button');
+    btn.disabled = soldOut;
+    btn.addEventListener('click', ()=>{
+      if (soldOut) return;
+      openPotModal(p);
+    });
+    root.appendChild(card);
+  });
+}
+
+/* 主食以彈窗選數量後加入購物車（含 soldout） */
+function renderSides(){
+  const root = el('#sideList'); root.innerHTML='';
+  SIDES.forEach(s=>{
+    const soldOut = isSO(s.id);
+
+    const card = document.createElement('div');
+    card.className = 'card bg-white p-4 flex flex-col';
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h3 class="text-lg font-semibold">${s.id}</h3>
+        </div>
+        <div class="text-right font-semibold mono">${money(s.price)}</div>
+      </div>
+      <div class="mt-3 text-sm ${soldOut ? 'text-red-600' : 'text-slate-600'}">
+        ${soldOut ? '本品今日已售完' : '點選以調整數量'}
+      </div>
+      <div class="mt-4 flex justify-end">
+        <button class="btn px-4 py-2 ${soldOut ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800'}">
+          ${soldOut ? '已售完' : '選擇'}
+        </button>
+      </div>`;
+    const btn = card.querySelector('button');
+    btn.disabled = soldOut;
+    if (!soldOut) {
+      btn.addEventListener('click', ()=> openSideModal(s));
+    }
+    root.appendChild(card);
+  });
+}
+
+/* ===== 火鍋 Modal ===== */
+let pmCurrent = null;
+let pmExtrasList = [];
+
+function openPotModal(pot){
+  pmCurrent = pot; document.body.classList.add('overflow-hidden');
+  el('#pmTitle').textContent = pot.name;
+  const sp = el('#pmSpice'); sp.innerHTML=''; pot.spiceOpts.forEach(s => { const o=document.createElement('option'); o.value=s; o.textContent=s; sp.appendChild(o); });
+
+  const capNote = el('#pmCapNote');
+  let maxQty = 9999;
+  if (pot.id === LIMIT_ITEM_ID) {
+    const remain = tripeRemaining();
+    if (remain !== Infinity && remain <= 0) {
+      capNote.textContent = '本品今日已售完';
+      capNote.className = 'text-sm mt-1 text-red-600';
+      el('#pmAdd').disabled = true;
+    } else {
+      capNote.textContent = '限量供應（以實際庫存為準）';
+      capNote.className = 'text-sm mt-1 text-slate-600';
+      el('#pmAdd').disabled = false;
+      if (remain !== Infinity) maxQty = remain;
+    }
+  } else {
+    capNote.textContent = '';
+  }
+
+  const qtyInput = el('#pmQty');
+  qtyInput.value = 1;
+  qtyInput.min = 1;
+  qtyInput.removeAttribute('max');
+  if (maxQty !== 9999) qtyInput.max = String(maxQty);
+  el('#pmNote').value = '';
+
+  const ex = el('#pmExtras'); ex.innerHTML='';
+  let extrasList;
+  if (pot.id === LIMIT_ITEM_ID) {
+    // 牛雜鍋：只允許白名單內的項目 (BEEF_TRIPES_ALLOWED 裡沒有新選項，所以兩個都不會出現)
+    extrasList = EXTRAS.filter(e => BEEF_TRIPES_ALLOWED.includes(e.id));
+  } else if (pot.id === '鴨血鍋') {
+    // 鴨血鍋：一般過濾掉牛腸，並額外過濾掉「豬肉換牛肉」(只留 加牛肉)
+    extrasList = EXTRAS.filter(e => e.id !== '牛腸' && e.id !== '豬肉換牛肉');
+  } else {
+    // 其他鍋：只過濾掉牛腸 (兩個新選項都會出現)
+    extrasList = EXTRAS.filter(e => e.id !== '牛腸');
+  }
+  pmExtrasList = extrasList; // ★ 關鍵：畫面與讀值共用同一份
+
+
+  extrasList.forEach(e=>{
+    const row=document.createElement('div');
+    row.className='flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2';
+    row.innerHTML=`
+      <div class="min-w-0"><div class="font-medium">${e.id}</div><div class="text-xs text-slate-600 mono">${money(e.price)}</div></div>
+      <div class="flex items-center gap-2">
+        <button class="dec btn px-2 py-1 border border-slate-300 hover:bg-slate-100">-</button>
+        <input type="number" min="0" value="0" class="exQty w-16 text-center border border-slate-300 rounded-xl py-1 bg-white text-slate-900" />
+        <button class="inc btn px-2 py-1 border border-slate-300 hover:bg-slate-100">+</button>
+      </div>`;
+    const qty = row.querySelector('.exQty');
+    row.querySelector('.dec').addEventListener('click', ()=>{
+      qty.value = Math.max(0,(parseInt(qty.value)||0)-1);
+      updatePmSubtotal(); // ★ 補這行
+    });
+    
+    row.querySelector('.inc').addEventListener('click', ()=>{
+      qty.value = Math.max(0,(parseInt(qty.value)||0)+1);
+      updatePmSubtotal(); // ★ 補這行
+    });
+
+    qty.addEventListener('input', updatePmSubtotal);
+    ex.appendChild(row);
+  });
+
+  const applyQtyCap = ()=>{
+    let v = Math.max(1, parseInt(qtyInput.value)||1);
+    if (maxQty !== 9999) v = Math.min(v, maxQty);
+    qtyInput.value = v;
+    updatePmSubtotal();
+  };
+  el('#pmDec').onclick = ()=>{ qtyInput.value = Math.max(1, (parseInt(qtyInput.value)||1) - 1); applyQtyCap(); };
+  el('#pmInc').onclick = ()=>{ qtyInput.value = (parseInt(qtyInput.value)||1) + 1; applyQtyCap(); };
+  qtyInput.oninput = applyQtyCap;
+
+  updatePmSubtotal();
+  el('#pmAdd').onclick = ()=>{
+    const qty = Math.max(1, parseInt(qtyInput.value)||1);
+    if (pmCurrent.id === LIMIT_ITEM_ID) {
+      const remainNow = tripeRemaining();
+      if (remainNow !== Infinity && qty > remainNow) {
+        alert('牛雜鍋為限量品，剩餘不足，請調整數量。');
+        return;
+      }
+    }
+    const spice = el('#pmSpice').value;
+    const note = el('#pmNote').value.trim();
+    const extras = [];
+    el('#pmExtras').querySelectorAll('.exQty').forEach((q, i) => {
+      const n = Math.max(0, parseInt(q.value) || 0);
+      if (n > 0) {
+        const e = pmExtrasList[i]; // ← 跟畫面完全一致
+        extras.push({
+          id: e.id,
+          price: e.price,
+          qty: n
+        });
+      }
+    });
+
+    addPotToCart({ pot: pmCurrent, spice, qty, note, extras });
+  };
+
+  el('#potModal').classList.remove('hidden');
+}
+function closePotModal(){ el('#potModal').classList.add('hidden'); document.body.classList.remove('overflow-hidden'); pmCurrent=null; }
+function updatePmSubtotal(){
+  if (!pmCurrent) return;
+
+  const potQty = Math.max(1, parseInt(el('#pmQty').value) || 1);
+  let subtotal = pmCurrent.price * potQty;
+
+  el('#pmExtras').querySelectorAll('.exQty').forEach((q, i) => {
+    const n = Math.max(0, parseInt(q.value) || 0);
+    if (n > 0) {
+      const e = pmExtrasList[i]; // ★ 一定用畫面那份
+      subtotal += e.price * n;
+    }
+  });
+
+  el('#pmSubtotal').textContent = money(subtotal);
+}
+
+
+/* ===== 主食 Modal ===== */
+let smCurrent = null;
+function openSideModal(side){
+  if (isSO(side.id)) {
+    alert('此品項已售完');
+    return;
+  }
+
+  smCurrent = side;
+  document.body.classList.add('overflow-hidden');
+  el('#smTitle').textContent = side.id;
+  el('#smPrice').textContent = `單價 ${money(side.price)}`;
+  const qtyInput = el('#smQty');
+  qtyInput.value = 1;
+  qtyInput.min = 1;
+  const updateSmSubtotal = ()=>{
+    const q = Math.max(1, parseInt(qtyInput.value)||1);
+    el('#smSubtotal').textContent = money(side.price * q);
+  };
+  el('#smDec').onclick = ()=>{ qtyInput.value = Math.max(1, (parseInt(qtyInput.value)||1) - 1); updateSmSubtotal(); };
+  el('#smInc').onclick = ()=>{ qtyInput.value = (parseInt(qtyInput.value)||1) + 1; updateSmSubtotal(); };
+  qtyInput.oninput = updateSmSubtotal;
+  el('#smAdd').onclick = ()=>{
+    if (isSO(side.id)) {
+      alert('此品項剛剛被設為售完，無法加入。');
+      closeSideModal();
+      return;
+    }
+    const q = Math.max(1, parseInt(qtyInput.value)||1);
+    addSideToCart(side, q);
+    closeSideModal();
+  };
+  updateSmSubtotal();
+  el('#sideModal').classList.remove('hidden');
+}
+function closeSideModal(){
+  el('#sideModal').classList.add('hidden');
+  document.body.classList.remove('overflow-hidden');
+  smCurrent = null;
+}
+
+/* ===== Cart ===== */
+function addPotToCart(bundle){ state.cart.push({ type:'pot', ...bundle }); renderCart(); closePotModal(); }
+function addSideToCart(side, qty){ state.cart.push({ type:'side', item:{ id:side.id, price:side.price, name:side.id }, qty }); renderCart(); }
+function removeCartEntry(index){ state.cart.splice(index,1); renderCart(); }
+function cartTotal(){
+  return state.cart.reduce((sum,e)=> e.type==='pot'
+    ? sum + e.pot.price*e.qty + e.extras.reduce((s,x)=> s + x.price*x.qty, 0)
+    : sum + e.item.price*e.qty, 0);
+}
+function renderCart(){
+  const root = el('#cartItems'); root.innerHTML='';
+  if(state.cart.length===0){ root.innerHTML='<div class="text-slate-500">購物車目前沒有商品。</div>'; }
+  state.cart.forEach((e, idx)=>{
+    const div=document.createElement('div');
+    if(e.type==='pot'){
+      const extrasText = e.extras.filter(x=>x.qty>0).map(x=>`${x.id}×${x.qty}`).join('、') || '(無單點)';
+      const noteText = e.note ? `｜備註：${e.note}` : '';
+      const price = e.pot.price*e.qty + e.extras.reduce((s,x)=> s + x.price*x.qty,0);
+      div.className='card bg-white p-4';
+      div.innerHTML=`
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="font-medium">${e.pot.name}（${e.spice}） ×
+              <input type="number" min="1" value="${e.qty}" class="lineQty w-16 text-center border border-slate-300 rounded-lg py-1 mx-1 bg-white text-slate-900">
+            </div>
+            <div class="text-sm text-slate-700 mt-1 break-words">${extrasText}</div>
+            ${e.note?`<div class="text-xs text-slate-500 mt-1">${noteText}</div>`:''}
+          </div>
+          <div class="shrink-0 text-right">
+            <div class="font-semibold mono">${money(price)}</div>
+            <button class="remove btn mt-2 px-3 py-2 border border-slate-300 hover:bg-slate-100">移除</button>
+          </div>
+        </div>`;
+      div.querySelector('.lineQty').addEventListener('input', ev=>{
+        let v=parseInt(ev.target.value)||1; if(v<1)v=1;
+        if (e.pot.id === LIMIT_ITEM_ID) {
+          const remain = tripeRemaining();
+          if (remain !== Infinity) v = Math.min(v, remain);
+        }
+        e.qty=v; renderCart();
+      });
+      div.querySelector('.remove').addEventListener('click', ()=> removeCartEntry(idx));
+    }else{
+      const price = e.item.price*e.qty;
+      div.className='card bg-white p-4 flex items-center justify-between gap-3';
+      div.innerHTML=`
+        <div class="min-w-0">
+          <div class="font-medium">${e.item.name}</div>
+          <div class="text-sm text-slate-600">
+            單價 ${money(e.item.price)} ×
+            <input type="number" min="1" value="${e.qty}" class="lineQty w-16 text-center border border-slate-300 rounded-lg py-1 mx-1 bg-white text-slate-900">
+            = <span class="mono">${money(price)}</span>
+          </div>
+        </div>
+        <button class="remove btn px-3 py-2 border border-slate-300 hover:bg-slate-100">移除</button>`;
+      div.querySelector('.lineQty').addEventListener('input', ev=>{ let v=parseInt(ev.target.value)||1; if(v<1)v=1; e.qty=v; renderCart(); });
+      div.querySelector('.remove').addEventListener('click', ()=> removeCartEntry(idx));
+    }
+    root.appendChild(div);
+  });
+  el('#cartTotal').textContent = money(cartTotal());
+}
+
+/* ===== API ===== */
+async function fetchWithTimeout(resource, options = {}, timeoutMs = 15000){
+  const ctrl = new AbortController(); const timer=setTimeout(()=>ctrl.abort(), timeoutMs);
+  try{ return await fetch(resource, { ...options, signal: ctrl.signal }); }
+  finally{ clearTimeout(timer); }
+}
+
+// 讀單：回傳 { ok, orders, limits, soldout }
+async function apiList(dateStr){
+  const u = new URL(ENDPOINT);
+  u.searchParams.set('action','list');
+  if(dateStr) u.searchParams.set('date', dateStr);
+  u.searchParams.set('key', API_KEY);
+  if (__urlMockNowRaw) u.searchParams.set('mockNow', __urlMockNowRaw);
+
+  const r = await fetchWithTimeout(u.toString(), {}, 15000);
+  const t = await r.text();
+  let d; try{ d = JSON.parse(t) }catch{ throw new Error('bad_json') }
+  if (!d.ok) throw new Error(d.error || 'list_failed');
+  return d;
+}
+
+// 送單
+async function apiCreate(order){
+  const body = { apiKey:API_KEY, action:'create', order };
+  if (__urlMockNowRaw) body.mockNow = __urlMockNowRaw;
+
+  const r = await fetchWithTimeout(ENDPOINT, { method:'POST', body: JSON.stringify(body) }, 20000);
+  const t = await r.text(); let d; try{ d=JSON.parse(t) }catch{ throw new Error('bad_json:'+t.slice(0,200)) }
+  return d;
+}
+
+/* ===== Slot helpers ===== */
+function bookedCapacityMap(dateStr){
+  const map={};
+  (state.ordersCache||[])
+    .filter(o=>o.date===dateStr)
+    .forEach(o=>{
+      const k=slotKey(new Date(o.assignedSlot));
+      map[k]=(map[k]||0)+(o.capacityUnits||0);
+    });
+  return map;
+}
+function cartCapacityUnits(){ return state.cart.reduce((n,e)=> e.type==='pot' ? n + e.pot.capacityUnits*e.qty : n, 0); }
+function autoAssignSlot(dateStr, earliest){
+  const booked=bookedCapacityMap(dateStr);
+  for(const s of generateSlots(dateStr)){
+    if(s.getTime()<earliest.getTime()) continue;
+    const used = booked[slotKey(s)] || 0;
+    if(used + cartCapacityUnits() <= STORE.slotCapacity) return s;
+  }
+  return null;
+}
+function isSlotAvailable(dateStr, slotDate, needUnits){
+  const used = (bookedCapacityMap(dateStr)[slotKey(slotDate)] || 0);
+  return used + needUnits <= STORE.slotCapacity;
+}
+
+/* ===== 取餐號碼：前端暫估 ===== */
+function nextPickupNoForDate(dateStr){
+  const dayOrders = (state.ordersCache || []).filter(o => o.date === dateStr);
+  const maxNo = dayOrders.reduce((m, o) => Math.max(m, Number(o.pickupNo || 0)), 0);
+  return maxNo + 1;
+}
+
+/* ===== 取餐時間下拉：把額滿的選項禁用（不顯示文字） ===== */
+function populateEarliestTimeOptions(){
+  const sel = el('#earliestTime');
+  const dateStr = serviceThursdayIso();
+  const booked = bookedCapacityMap(dateStr);
+
+  // 保留「不指定」
+  sel.innerHTML = '<option value="">不指定（系統自動安排）</option>';
+
+  generateSlots(dateStr).forEach(s=>{
+    const label = slotKey(s);
+    const used = booked[label] || 0;
+    const full = used >= STORE.slotCapacity;
+
+    const o = document.createElement('option');
+    o.textContent = label;
+    o.disabled = full;
+    if (full) o.title = '此時段已滿';
+    o.value = label;
+
+    sel.appendChild(o);
+  });
+}
+
+/* ===== Submit（僅開放週三 00:00 ～ 週四 20:30） ===== */
+async function onSubmitOrder(e){
+  e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const setBusy = b => { submitBtn.disabled=b; submitBtn.textContent = b ? '送出中…' : '送出訂單'; };
+  const showErr = m => el('#formError').textContent = m;
+
+  setBusy(true); el('#formError').textContent='';
+
+  try{
+    if(state.cart.length===0) { showErr('購物車尚無商品。'); return; }
+    const name = el('#customerName').value.trim();
+    const phone = el('#customerPhone').value.trim();
+    if(!name || !phone){ showErr('請完整填寫姓名與電話。'); return; }
+
+    if (!isWithinOrderingWindow()) {
+      showErr('目前不在開放點餐時間（週三 00:00 起至週四 20:30 止）。');
+      return;
+    }
+
+    const tripeInCart = state.cart.filter(e=> e.type==='pot' && e.pot?.id===LIMIT_ITEM_ID)
+                                  .reduce((s,e)=> s + Number(e.qty||0), 0);
+    const remainNow = tripeRemaining();
+    if (remainNow !== Infinity && tripeInCart > remainNow) {
+      showErr('牛雜鍋今日限量已達上限，請調整數量或改點其他品項。');
+      return;
+    }
+
+// ... (在檢查完牛雜鍋數量後，替換以下這段程式碼)
+    const dateStr = serviceThursdayIso();
+    const thuOpen  = dayjs.tz(`${dateStr} ${pad2(STORE.openHour)}:${pad2(STORE.openMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+    const thuClose = dayjs.tz(`${dateStr} ${pad2(STORE.closeHour)}:${pad2(STORE.closeMinute)}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+    const now = nowTz(); // 取得台北時區的當前時間
+
+    // --- 1. 計算硬性最低取餐時間 (絕對不可早於此時間) ---
+    // 即時的最低時間：當前時間 + 備餐緩衝時間 (20分鐘)
+    let absoluteMinTime = now.clone().add(STORE.prepBufferMinutes,'minute');
+
+    // 如果現在是週三或週四營業前，最早取餐時間仍為週四的開門時間
+    if (absoluteMinTime.isBefore(thuOpen)) {
+        absoluteMinTime = thuOpen;
+    }
+
+    // 將最低時間向上取整到最接近的 15 分鐘時段
+    const roundedAbsoluteMinTime = dayjs(roundUpToSlot(absoluteMinTime.toDate(), STORE.slotMinutes));
+    // --- 結束最低時間計算 ---
+
+    // 檢查連最早的時段是否都已超過營業時間
+    if (roundedAbsoluteMinTime.isAfter(thuClose)) {
+        showErr('今日（週四）可用時段已結束，請於下週三再行預訂。');
+        return;
+    }
+    
+    const sel = el('#earliestTime').value;
+    let slot = null;
+    const needUnits = cartCapacityUnits();
+
+    if (sel) {
+        // 2. 顧客指定了特定時間
+        const selectedTimeSlot = dayjs.tz(`${dateStr} ${sel}`,'YYYY-MM-DD HH:mm','Asia/Taipei');
+        
+        // 檢查指定的時段是否早於硬性最低時間（週四當天才會執行此檢查，符合您的要求）
+        if (selectedTimeSlot.isBefore(roundedAbsoluteMinTime)) {
+            const minTimeStr = roundedAbsoluteMinTime.format('HH:mm');
+            showErr(`您選擇的取餐時間已過，請重新選擇。`);
+            return;
+        }
+        
+        // 檢查指定時段的容量
+        if (!isSlotAvailable(dateStr, selectedTimeSlot.toDate(), needUnits)) {
+            showErr(`您選擇的 ${slotKey(selectedTimeSlot.toDate())} 時段已額滿，請改選其他取餐時間。`);
+            return;
+        }
+        slot = selectedTimeSlot.toDate();
+
+    } else {
+        // 3. 顧客未指定時間（系統自動安排）
+        // 從硬性最低時間開始搜索第一個有容量的時段
+        slot = autoAssignSlot(dateStr, roundedAbsoluteMinTime.toDate());
+
+        if (!slot) {
+            showErr('今日（週四）可用時段已額滿，請於下週三再行預訂。');
+            return;
+        }
+    }
+// ... (繼續後續的程式碼：建構 items, subtotal, order 等)
+
+    const items = [];
+    state.cart.forEach(e=>{
+      if(e.type==='pot'){
+        const nameWith = `${e.pot.name}（${e.spice}）` + (e.note?`｜備註：${e.note}`:'');
+        items.push({ id:e.pot.id, name:nameWith, price:e.pot.price, qty:e.qty, capacityUnits:e.pot.capacityUnits });
+        e.extras.filter(x=>x.qty>0).forEach(x=> items.push({ id:x.id, name:x.id, price:x.price, qty:x.qty, capacityUnits:0 }));
+      }else{
+        items.push({ id:e.item.id, name:e.item.name, price:e.item.price, qty:e.qty, capacityUnits:0 });
+      }
+    });
+    const subtotal = items.reduce((s,it)=> s + it.price*it.qty, 0);
+    const order = {
+      id: 'O'+Date.now(),
+      date: dateStr,
+      assignedSlot: slot.toISOString(),
+      capacityUnits: needUnits,
+      customer: { name, phone },
+      items, subtotal, discount: 0, total: subtotal,
+      createdAt: new Date().toISOString(),
+      source: 'web-customer',
+      pickupNo: nextPickupNoForDate(dateStr)
+    };
+
+    const resp = await apiCreate(order);
+    if (!resp.ok) {
+      if (resp.error === 'limit_reached' && resp.itemId === LIMIT_ITEM_ID) {
+        showErr('牛雜鍋今日限量已達上限，請調整數量或改點其他品項。');
+        try{
+          const data = await apiList(dateStr);
+          state.ordersCache = data.orders || {};
+          state.limits = data.limits || {};
+          state.soldout = data.soldout || {};   // ← 同步 soldout
+          saveSoldoutCache(state.soldout);      // ← 更新快取
+          populateEarliestTimeOptions();
+          renderPots();
+          renderSides();
+        }catch(_){}
+        return;
+      }
+      const msg = resp.message ? `：${resp.message}` : '';
+      showErr(`送單失敗：${resp.error || 'create_failed'}${msg}`);
+      return;
+    }
+
+    const pickupNo = (resp.pickupNo || (resp.order && resp.order.pickupNo)) || order.pickupNo;
+
+    state.cart = []; renderCart();
+    el('#assignedSlotText').textContent = dayjs(order.assignedSlot).tz().format('YYYY-MM-DD HH:mm');
+    el('#pickupNoText').textContent = String(pickupNo);
+    el('#successModal').classList.remove('hidden');
+
+    try{
+      const data = await apiList(dateStr);
+      state.ordersCache = data.orders || [];
+      state.limits = data.limits || {};
+      state.soldout = data.soldout || {};   // ← 成功後也同步 soldout
+      saveSoldoutCache(state.soldout);      // ← 更新快取
+      populateEarliestTimeOptions();
+      renderPots();
+      renderSides();
+    }catch(_){}
+
+  }catch(err){
+    console.error('submit_failed', err);
+    const m = String(err && err.message || '');
+    if (m.includes('timeout')) showErr('連線逾時，請再試一次。');
+    else if (m.startsWith('bad_json')) showErr('伺服器回應格式異常：' + m.slice(8));
+    else if (m.includes('server:unauthorized')) showErr('伺服器拒絕：金鑰或權限不符。');
+    else if (m.startsWith('server:exception')) showErr('伺服器內部錯誤：' + m.replace(/^server:/,''));
+    else showErr('送單失敗：' + m.replace(/^server:/,''));
+  }finally{
+    setBusy(false);
+  }
+}
+
+/* ===== Notice & Init ===== */
+function openNotice(){ document.body.classList.add('overflow-hidden'); el('#noticeModal').classList.remove('hidden'); }
+function closeNotice(){ el('#noticeModal').classList.add('hidden'); document.body.classList.remove('overflow-hidden'); }
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  el('#year').textContent = new Date().getFullYear();
+
+  // 首屏立刻用「本機快取」渲染（若沒快取→預設可點）
+  renderSides();
+  renderCart();
+  populateEarliestTimeOptions();
+  renderPots();
+
+  // 抓取本次週四資料（含 soldout），回來後覆蓋並更新快取
+  apiList(serviceThursdayIso())
+    .then((data)=>{
+      state.ordersCache = data.orders || [];
+      state.limits     = data.limits || {};
+      state.soldout    = data.soldout || {};   // 先接住 soldout
+      saveSoldoutCache(state.soldout);         // 寫入快取
+      populateEarliestTimeOptions();
+      renderPots();
+      renderSides();                            // 覆蓋快取渲染 → 與後端一致
+    })
+    .catch(()=>{ /* 忽略失敗，保留快取渲染 */ });
+
+  // 公告與其它固定事件綁定
+  openNotice();
+  el('#noticeClose').addEventListener('click', closeNotice);
+
+  el('#pmClose').addEventListener('click', closePotModal);
+  el('#smClose').addEventListener('click', closeSideModal);
+
+  el('#clearCart').addEventListener('click', ()=>{ state.cart=[]; renderCart(); });
+  el('#checkoutForm').addEventListener('submit', onSubmitOrder);
+  el('#closeSuccess').addEventListener('click', ()=> el('#successModal').classList.add('hidden'));
+});
+</script>
 </body>
 </html>
